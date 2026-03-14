@@ -46,14 +46,18 @@ def generate_sequence(track_id, mmsi, ship_type, is_anomalous=False, seq_len=50)
         lon += (dist / 60.0) * np.sin(np.radians(course))
         lat += (dist / 60.0) * np.cos(np.radians(course))
         
-        # Add jitter
+        # Add jitter and Waypoint Turns
         if ship_type == 'fishing':
             # Fishing boats wander a lot while trawling
             course = (course + random.uniform(-15, 15)) % 360
             display_speed = speed + random.uniform(-2.0, 2.0)
             display_course = course
         else:
-            # Commercial ships stay steady
+            # Commercial ships stay steady BUT have Waypoints
+            # 5% chance to hit a turn in the shipping lane
+            if random.random() < 0.05:
+                course = (course + random.uniform(-25, 25)) % 360
+                
             display_speed = speed + random.uniform(-0.1, 0.1)
             display_course = (course + random.uniform(-0.5, 0.5)) % 360
             
