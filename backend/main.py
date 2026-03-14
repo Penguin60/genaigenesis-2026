@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any
 from dotenv import load_dotenv
+from agents.orchestrator import signal_nexus_orchestrator # import Railtrack
 
 load_dotenv()
 
@@ -44,12 +45,16 @@ def analyze_vessel(request: VesselRequest) -> Dict[str, Any]:
 @app.post("/api/v1/agent-query")
 def ask_agent(request: QueryRequest) -> Dict[str, Any]:
     """
-    Query existing AI agents through LangGraph for more complex or basic queries.
+    Query existing AI agents through Railtracks for parallel 
+    vessel insurance and registration checks.
     """
     try:
-        response = query_agent(request.query)
+        # This triggers the Railtracks flow defined in orchestrator.py
+        # It handles the watsonx.ai calls and tool execution.
+        response = signal_nexus_orchestrator.run(query=request.query)
         return {"response": response}
     except Exception as e:
+        # Railtracks observability will log the specific node failure
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/v1/info")
