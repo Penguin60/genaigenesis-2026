@@ -1,6 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from scoring.risk_calculator import calculate_sri
 from agents.orchestrator import query_agent
@@ -53,8 +56,8 @@ def ask_agent(request: QueryRequest) -> Dict[str, Any]:
 def vessel_info(request: VesselRequest) -> Dict[str, Any]:
     """
     Aggregated vessel intelligence endpoint.
-    Queries retirement status, ship age, and runs three parallel AI agent
-    checks (insurer, registration country, shell company detection) via LangGraph.
+    Queries retirement status, ship age, and runs two parallel AI agent
+    checks (insurer reliability, flag-of-convenience analysis) via LangGraph + watsonx.
     """
     try:
         # Direct checks (no agent needed)
@@ -71,7 +74,6 @@ def vessel_info(request: VesselRequest) -> Dict[str, Any]:
             "age": age,
             "insurer": agent_results.get("insurer", {}),
             "registration": agent_results.get("registration", {}),
-            "ownership": agent_results.get("ownership", {}),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

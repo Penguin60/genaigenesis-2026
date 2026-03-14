@@ -76,19 +76,3 @@ def get_registration_data(imo: Optional[str] = None, mmsi: Optional[str] = None)
         "flag_of_convenience": flag in foc_flags,
         "raw_registry": registry,
     }
-
-
-def get_ownership_data(imo: Optional[str] = None, mmsi: Optional[str] = None) -> Dict[str, Any]:
-
-    """
-    Gathers raw ownership/company data from the knowledge lakehouse.
-    This data is passed to the shell company detection agent.
-    """
-    lakehouse = query_knowledge_lakehouse(mmsi or imo or "")
-    return {
-        "imo": imo,
-        "mmsi": mmsi,
-        "shell_company_risk": lakehouse.get("shell_company_risk", False),
-        "ownership_level": lakehouse.get("ownership_level", "Unknown"),
-        "raw_lakehouse": lakehouse,
-    }
