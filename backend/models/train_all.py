@@ -62,7 +62,7 @@ def train_ship_type(ship_type: str, epochs: int, batch_size: int, lr: float):
 
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
 #   TODO GPU will never be supported because I still need to install the right package
-    model = TransformerVAE(input_dim=6, seq_len=50, latent_dim=16, hidden_dim=64).to(DEVICE)
+    model = TransformerVAE(input_dim=7, seq_len=50, latent_dim=16, hidden_dim=64).to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     model.train()
