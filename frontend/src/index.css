@@ -6,7 +6,7 @@
   --color-border: #1e2230;
   --color-text: #c8cdd6;
   --color-text-dim: #6b7280;
-  --color-accent: #00d4ff;
+  --color-accent: #5b8def;
   --color-badge-red: #f87171;
   --color-badge-red-bg: rgba(239, 68, 68, 0.15);
   --color-badge-amber: #fbbf24;
@@ -24,4 +24,8 @@ body {
 
 #root {
   @apply min-h-screen;
+}
+
+.leaflet-interactive {
+  filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.7)) drop-shadow(0 0 12px rgba(239, 68, 68, 0.4));
 }
