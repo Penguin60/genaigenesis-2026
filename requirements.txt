@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic
+torch
+langgraph
+ibm-watson-machine-learning
+ibm-watsonx-ai
+python-dotenv
+requests
+pandas
