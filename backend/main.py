@@ -144,6 +144,8 @@ def chat(request: ChatRequest) -> Dict[str, Any]:
     try:
         response = run_chat(request.message, request.context or "")
         return {"response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/analysis")
 def run_analysis(request: AnalysisRequest) -> Dict[str, Any]:
