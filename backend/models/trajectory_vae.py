@@ -74,6 +74,18 @@ class TrajectoryDataset(Dataset):
         if raw['SPEED'].max() > MAX_SPEED_KNOTS:
             return None
 
+        # Calculate Time Delta (dt) in hours
+        MAX_DT_HOURS = 12.0
+        if 'TIMESTAMP' in df_seq.columns:
+            # Assumes pandas datetime format and handles missing rows safely
+            dt_seconds = df_seq['TIMESTAMP'].diff().dt.total_seconds().fillna(0.0)
+            dt_hours = dt_seconds / 3600.0
+        else:
+            # Fallback if no timestamp
+            dt_hours = pd.Series(np.zeros(len(df_seq)))
+            
+        dt_hours = np.clip(dt_hours, 0.0, MAX_DT_HOURS)
+
         # Encode COURSE as sin/cos to handle circularity (0° and 360° are the same)
         course_rad = raw['COURSE'] * (3.141592653589793 / 180.0)
 
@@ -82,20 +94,22 @@ class TrajectoryDataset(Dataset):
         # LAT: [-90,  90]  → [-1, 1]
         # sin/cos COURSE: already in [-1, 1]
         # SPEED: [0, 25]   → [0, 1]
+        # DT:    [0, 12]   → [0, 1]
         features = np.stack([
             raw['LON'].values / 180.0,
             raw['LAT'].values / 90.0,
             np.sin(course_rad.values),
             np.cos(course_rad.values),
             raw['SPEED'].values / MAX_SPEED_KNOTS,
-        ], axis=1)  # shape: (seq_len, 5)
+            dt_hours.values / MAX_DT_HOURS,
+        ], axis=1)  # shape: (seq_len, 6)
         
         # Pad or truncate to max_seq_len
         if len(features) > self.max_seq_len:
             features = features[:self.max_seq_len]
             return torch.tensor(features, dtype=torch.float32)
         else:
-            padding = torch.zeros(self.max_seq_len - len(features), 5)
+            padding = torch.zeros(self.max_seq_len - len(features), 6)
             features = torch.cat([torch.tensor(features, dtype=torch.float32), padding])
             
         return features
@@ -111,7 +125,7 @@ class TransformerVAE(nn.Module):
     Stub for the Transformer-VAE (Variational Autoencoder) implemented in PyTorch.
     Trained on 'Normal' tanker routes to detect Movement Fraud.
     """
-    def __init__(self, input_dim=5, latent_dim=16, seq_len=50, hidden_dim=64):
+    def __init__(self, input_dim=6, latent_dim=16, seq_len=50, hidden_dim=64):
         super(TransformerVAE, self).__init__()
         self.latent_dim = latent_dim
         self.seq_len = seq_len
@@ -222,6 +236,19 @@ def calculate_reconstruction_error(trajectory: List[Dict[str, float]], ship_type
         
     import numpy as np
     MAX_SPEED_KNOTS = 25.0
+    MAX_DT_HOURS = 12.0
+    
+    # Parse timestamps for dt feature
+    if 'TIMESTAMP' in df_seq.columns:
+        df_seq['TIMESTAMP'] = pd.to_datetime(df_seq['TIMESTAMP'])
+        df_seq = df_seq.sort_values('TIMESTAMP')
+        dt_seconds = df_seq['TIMESTAMP'].diff().dt.total_seconds().fillna(0.0)
+        dt_hours = dt_seconds / 3600.0
+    else:
+        dt_hours = pd.Series(np.zeros(len(df_seq)))
+        
+    dt_hours = np.clip(dt_hours, 0.0, MAX_DT_HOURS)
+    
     raw = df_seq[['LON', 'LAT', 'COURSE', 'SPEED']].astype(float)
     course_rad = raw['COURSE'] * (3.141592653589793 / 180.0)
     # Apply same normalization as training
@@ -231,13 +258,14 @@ def calculate_reconstruction_error(trajectory: List[Dict[str, float]], ship_type
         np.sin(course_rad.values),
         np.cos(course_rad.values),
         raw['SPEED'].values / MAX_SPEED_KNOTS,
-    ], axis=1)  # shape: (seq_len, 5)
+        dt_hours.values / MAX_DT_HOURS,
+    ], axis=1)  # shape: (seq_len, 6)
     
     # Pad to max_seq_len
     if len(features) > max_seq_len:
         features = torch.tensor(features[:max_seq_len], dtype=torch.float32)
     else:
-        padding = torch.zeros(max_seq_len - len(features), 5)
+        padding = torch.zeros(max_seq_len - len(features), 6)
         features = torch.cat([torch.tensor(features, dtype=torch.float32), padding])
         
     # Add batch dimension
@@ -246,7 +274,7 @@ def calculate_reconstruction_error(trajectory: List[Dict[str, float]], ship_type
     # 2. Load the pre-trained VAE model for the given ship type
     models_dir = os.path.dirname(os.path.abspath(__file__))
     model_path = os.path.join(models_dir, f'vae_{ship_type}.pth')
-    model = TransformerVAE(input_dim=5, seq_len=max_seq_len)
+    model = TransformerVAE(input_dim=6, seq_len=max_seq_len)
     try:
         model.load_state_dict(torch.load(model_path, weights_only=True))
         model.eval()
