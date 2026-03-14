@@ -258,20 +258,40 @@
                       return dirs[Math.round(deg / 22.5) % 16];
                     }
 
+                    function getHeatVisualsForZoom(zoom) {
+                      if (zoom <= 8) return { radius: 22, blur: 18 };
+                      if (zoom === 9) return { radius: 28, blur: 22 };
+                      if (zoom === 10) return { radius: 36, blur: 28 };
+                      if (zoom === 11) return { radius: 48, blur: 36 };
+                      if (zoom === 12) return { radius: 64, blur: 46 };
+                      if (zoom === 13) return { radius: 82, blur: 58 };
+                      return { radius: 104, blur: 72 };
+                    }
+
                     function HeatLayer({ points }) {
                       const map = useMap();
+                      const [zoom, setZoom] = useState(() => map.getZoom());
+
+                      useEffect(() => {
+                        const handleZoom = () => setZoom(map.getZoom());
+                        map.on("zoomend", handleZoom);
+                        return () => map.off("zoomend", handleZoom);
+                      }, [map]);
+
                       useEffect(() => {
                         if (!points.length) return;
+                        const { radius, blur } = getHeatVisualsForZoom(zoom);
                         const heat = L.heatLayer(points, {
-                          radius: 22,
-                          blur: 18,
-                          max: 0.5,
+                          radius,
+                          blur,
+                          max: 0.6,
                           maxZoom: 12,
-                          minOpacity: 0.04,
+                          minOpacity: 0.05,
                           gradient: { 0.15: "transparent", 0.3: "rgba(12,20,69,0.3)", 0.42: "#b45309", 0.55: "#d97706", 0.7: "#ea580c", 0.85: "#dc2626", 1.0: "#fef08a" },
                         }).addTo(map);
                         return () => map.removeLayer(heat);
-                      }, [map, points]);
+                      }, [map, points, zoom]);
+
                       return null;
                     }
 
