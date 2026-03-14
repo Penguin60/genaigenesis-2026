@@ -97,14 +97,21 @@ class TrajectoryDataset(Dataset):
 
         # --- Normalize all features ---
         # v_LON/v_LAT: Max expected change is ~0.25 deg/hour (at 15 knots) -> / 0.25
-        # We remove hard clipping here so anomalies stay HUGE for the VAE to see
+        # Derived Speed (Calculated from position)
+        v_mag = np.sqrt(v_lon.values**2 + v_lat.values**2) # In degrees/hour
+        v_mag_knots = v_mag * 60.0 # Rough conversion to knots
+        
+        # Mismatch Feature: (Reported Speed - Derived Speed)
+        # This is the "Smoking Gun" for shadow vessels
+        speed_mismatch = (raw['SPEED'].values - v_mag_knots)
+        
         features = np.stack([
             v_lon.values / 0.25,
             v_lat.values / 0.25,
             np.sin(course_rad.values),
             np.cos(course_rad.values),
             raw['SPEED'].values / MAX_SPEED_KNOTS,
-            dt_hours.values / MAX_DT_HOURS,
+            speed_mismatch / 10.0, # Target feature for capture
         ], axis=1)  # shape: (seq_len, 6)
         
         # Pad or truncate to max_seq_len
@@ -260,6 +267,11 @@ def calculate_reconstruction_error(trajectory: List[Dict[str, float]], ship_type
     v_lat = raw['LAT'].diff().fillna(0.0) / dt_adj
     
     course_rad = raw['COURSE'] * (3.141592653589793 / 180.0)
+    # Derived values for conflict detection
+    v_mag = np.sqrt(v_lon.values**2 + v_lat.values**2)
+    v_mag_knots = v_mag * 60.0
+    speed_mismatch = (raw['SPEED'].values - v_mag_knots)
+    
     # Apply same normalization as training
     features = np.stack([
         v_lon.values / 0.25,
@@ -267,7 +279,7 @@ def calculate_reconstruction_error(trajectory: List[Dict[str, float]], ship_type
         np.sin(course_rad.values),
         np.cos(course_rad.values),
         raw['SPEED'].values / MAX_SPEED_KNOTS,
-        dt_hours.values / MAX_DT_HOURS,
+        speed_mismatch / 10.0, # Explicit Conflict feature
     ], axis=1)  # shape: (seq_len, 6)
     
     # Pad to max_seq_len
