@@ -186,6 +186,7 @@ function getTrailUntil(track, targetTs) {
 
 const BADGE_STYLES = {
   compliant: "bg-[#16a34a]/20 text-[#16a34a]",
+  "anomaly-detected": "bg-[#7f1d1d]/30 text-[#ef4444]",
   "ais-gap": "bg-[#991b1b]/20 text-[#ef4444]",
   "dark-activity": "bg-[#7f1d1d]/30 text-[#dc2626]",
   rendezvous: "bg-[#450a0a]/30 text-[#f87171]",
@@ -195,6 +196,7 @@ const BADGE_STYLES = {
 
 // ── Heatmap: density-based danger zone engine ──────────
 const THREAT_WEIGHT = {
+  "Anomaly Detected": 0.48,
   "AIS Gap": 0.48,
   "Dark Activity": 0.48,
   Rendezvous: 0.36,
@@ -691,9 +693,9 @@ function App() {
                       <Polyline
                         positions={trail}
                         pathOptions={{
-                          color: "#f8fafc",
+                          color: isGood ? greenColor : redColor,
                           weight: 4,
-                          opacity: 0.65,
+                          opacity: 0.8,
                         }}
                       />
                     )}
@@ -749,7 +751,9 @@ function App() {
                       pathOptions={{
                         color:
                           selectedVesselImo === vessel.imo
-                            ? "#ffffff"
+                            ? isGood
+                              ? greenColor
+                              : redColor
                             : isGood
                               ? greenColor
                               : redColor,
@@ -992,7 +996,13 @@ function App() {
                 {vesselsAtTime.map((v) => (
                   <tr
                     key={v.imo}
-                    className={`hover:bg-white/[0.02] cursor-pointer ${selectedVesselImo === v.imo ? "bg-white/[0.04]" : ""}`}
+                    className={`hover:bg-white/[0.02] cursor-pointer ${
+                      selectedVesselImo === v.imo
+                        ? v.status === "Compliant"
+                          ? "bg-[#16a34a]/20"
+                          : "bg-[#7f1d1d]/35"
+                        : ""
+                    }`}
                     onClick={() => setSelectedVesselImo(v.imo)}
                   >
                     <td className="px-3 py-2.5 border-b border-border">
