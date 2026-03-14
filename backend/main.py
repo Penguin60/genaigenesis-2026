@@ -35,6 +35,7 @@ app.add_middleware(
 )
 
 app.state.sim_start = None
+app.state.sim_csv_start = None
 app.state.sim_speed = 300
 
 class VesselRequest(BaseModel):
@@ -71,16 +72,16 @@ def start_simulation():
     csv_start_time = df['TIMESTAMP'].min()
     csv_end_time = df['TIMESTAMP'].max()
     total_span_seconds = max((csv_end_time - csv_start_time).total_seconds(), 0.0)
-    half_span_seconds = total_span_seconds / 2
-
-    # Backdate sim_start so the first /simulation call lands around the dataset midpoint.
-    app.state.sim_start = time.time() - (half_span_seconds / app.state.sim_speed)
+    initial_offset_seconds = total_span_seconds * 0
+    
+    app.state.sim_csv_start = csv_start_time + pd.Timedelta(seconds=initial_offset_seconds)
+    app.state.sim_start = time.time()
+    
     return {
         "message": "Simulation started",
         "start_time": app.state.sim_start,
-        "dataset_start": csv_start_time.isoformat(),
-        "dataset_end": csv_end_time.isoformat(),
-        "initial_offset_seconds": half_span_seconds,
+        "csv_start_reference": app.state.sim_csv_start.isoformat(),
+        "initial_offset_seconds": initial_offset_seconds,
     }
 
 @app.get("/api/v1/simulation")
@@ -97,20 +98,27 @@ def simulation():
     df = df[df['CRAFT_ID'] != 'END']
     df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'])
     
-    csv_start_time = df['TIMESTAMP'].min()
     real_elapsed = time.time() - app.state.sim_start
     sim_elapsed_seconds = real_elapsed * app.state.sim_speed
-    current_sim_time = csv_start_time + pd.Timedelta(seconds=sim_elapsed_seconds)
+    current_sim_time = app.state.sim_csv_start + pd.Timedelta(seconds=sim_elapsed_seconds)
 
+    # Only show pings that have occurred SINCE the simulation start point
+    # df_visible = df[(df['TIMESTAMP'] >= app.state.sim_csv_start) & (df['TIMESTAMP'] <= current_sim_time)]
     df_visible = df[df['TIMESTAMP'] <= current_sim_time]
     
     vessels = {}
     for mmsi, group in df_visible.groupby('MMSI'):
+        if (mmsi == 2000016):
+            print(group)
+            print(current_sim_time)
         group_sorted = group.sort_values('TIMESTAMP')
         pings = group_sorted.to_dict('records')
         
         ship_type = pings[0]['TYPE'].lower()
         score = calculate_reconstruction_error(pings, ship_type=ship_type)
+        
+        # Provide the latest point separately for easy frontend rendering
+        latest = pings[-1]
         
         vessels[mmsi] = {
             "name": f"VESSEL_{mmsi}",
@@ -119,6 +127,13 @@ def simulation():
             "type": pings[0]['TYPE'],
             "status": "Anomaly Detected" if score > 0.1 else "Compliant",
             "score": round(score, 4),
+            "latest_point": {
+                "ts": latest['TIMESTAMP'].isoformat(),
+                "lat": latest['LAT'],
+                "lon": latest['LON'],
+                "course": latest['COURSE'],
+                "speed": latest['SPEED']
+            },
             "track": [{"ts": p['TIMESTAMP'].isoformat(), "lat": p['LAT'], "lon": p['LON'], "course": p['COURSE'], "speed": p['SPEED']} for p in pings]
         }
 
