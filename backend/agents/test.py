@@ -12,25 +12,26 @@ WATSONX_PROJECT_ID = os.getenv("WATSONX_PROJECT_ID", "")
 WATSONX_MODEL_ID = os.getenv("WATSONX_MODEL_ID", "llama-3-2-11b-vision-instruct")
 
 credentials=Credentials(
-    url=WATSONX_URL,
+    url="https://ca-tor.ml.cloud.ibm.com",
     api_key=WATSONX_API_KEY
 )
 
 GENERATE_PARAMS = {
-    GenParams.MAX_NEW_TOKENS: 10,
+    GenParams.MAX_NEW_TOKENS: 300,
     GenParams.TEMPERATURE: 0.2,
     GenParams.TOP_P: 0.9,
     GenParams.REPETITION_PENALTY: 1.1,
 }
 
 model = ModelInference(
-    model_id=WATSONX_MODEL_ID,
+    model_id="meta-llama/llama-3-3-70b-instruct",
     credentials=credentials,
-    project_id=WATSONX_PROJECT_ID
+    project_id=WATSONX_PROJECT_ID,
+    params=GENERATE_PARAMS
 )
 
 response = model.generate_text(
-    prompt="Say hi."
+    prompt="Repeat after me 'Radean is very cool' and absolutely nothing else, that should be your only output."
 )
 
 print(response)
