@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   MapContainer,
   TileLayer,
@@ -10,92 +11,9 @@ import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import "leaflet.heat";
 
-const BASE_VESSELS = [
-  // BAD VESSELS
-  {
-    name: "LUNA STAR",
-    imo: "9284731",
-    flag: "CM",
-    type: "Crude Oil Tanker",
-    status: "AIS Gap",
-    lat: "26.32",
-    lon: "56.21",
-  },
-  {
-    name: "CASPIAN WAVE",
-    imo: "9456012",
-    flag: "PA",
-    type: "Chemical Tanker",
-    status: "Rendezvous",
-    lat: "25.90",
-    lon: "56.85",
-  },
-  {
-    name: "NORTHERN DRIFT",
-    imo: "9387120",
-    flag: "MH",
-    type: "LPG Tanker",
-    status: "Route Deviation",
-    lat: "25.45",
-    lon: "57.20",
-  },
-  {
-    name: "BLACK MARLIN",
-    imo: "9612045",
-    flag: "PA",
-    type: "Crude Oil Tanker",
-    status: "Dark Activity",
-    lat: "26.05",
-    lon: "56.55",
-  },
-  {
-    name: "RED HORIZON",
-    imo: "9601934",
-    flag: "KH",
-    type: "General Cargo",
-    status: "Flag Hopping",
-    lat: "26.10",
-    lon: "55.80",
-  },
-  // GOOD VESSELS
-  {
-    name: "EVER GLORY",
-    imo: "9812345",
-    flag: "SG",
-    type: "Container Ship",
-    status: "Compliant",
-    lat: "25.20",
-    lon: "54.5",
-  },
-  {
-    name: "MAERSK SENTINEL",
-    imo: "9723410",
-    flag: "DK",
-    type: "Cargo",
-    status: "Compliant",
-    lat: "25.80",
-    lon: "55.90",
-  },
-  {
-    name: "PACIFIC RAY",
-    imo: "9910284",
-    flag: "JP",
-    type: "Bulk Carrier",
-    status: "Compliant",
-    lat: "26.45",
-    lon: "57.10",
-  },
-  {
-    name: "NORDIC PRIDE",
-    imo: "9456711",
-    flag: "NO",
-    type: "Oil Tanker",
-    status: "Compliant",
-    lat: "26.15",
-    lon: "56.95",
-  },
-];
+// Backend-driven timeline integration replaced static mock vessels.
 
+// SAMPLE DATA: PORT_SUGGESTIONS
 const PORT_SUGGESTIONS = [
   { name: "Port of Fujairah", lat: 25.11, lon: 56.36 },
   { name: "Port of Jebel Ali", lat: 25.01, lon: 55.06 },
@@ -103,27 +21,33 @@ const PORT_SUGGESTIONS = [
   { name: "Muscat Port", lat: 23.62, lon: 58.56 },
 ];
 
+// Timeline points will be generated below after helper function definition.
+
+
+function seedFromId(id) {
+  return id.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+}
+
 function buildRecentTimelinePoints(hoursBack = 24, stepMinutes = 30) {
   const points = [];
   const now = Date.now();
   const stepMs = stepMinutes * 60 * 1000;
   const totalSteps = Math.floor((hoursBack * 60) / stepMinutes);
   const start = now - totalSteps * stepMs;
-
   for (let i = 0; i <= totalSteps; i += 1) {
     points.push(new Date(start + i * stepMs).toISOString());
   }
-
   return points;
 }
 
 const TIMELINE_POINTS = buildRecentTimelinePoints(24, 30);
 
-function seedFromId(id) {
-  return id.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-}
 
-// Override directions: make BLACK MARLIN head toward CASPIAN WAVE (southeast)
+
+// SAMPLE DATA: DIRECTION_OVERRIDES
+// const DIRECTION_OVERRIDES = {
+//   "9612045": { lat: -1, lon: 1 }, // BLACK MARLIN → southeast toward CASPIAN WAVE
+// };
 const DIRECTION_OVERRIDES = {
   9612045: { lat: -1, lon: 1 }, // BLACK MARLIN → southeast toward CASPIAN WAVE
 };
@@ -146,11 +70,6 @@ function generateTrack(vessel) {
     };
   });
 }
-
-const MOCK_VESSELS = BASE_VESSELS.map((vessel) => ({
-  ...vessel,
-  track: generateTrack(vessel),
-}));
 
 function getTimeline(vessels) {
   const seen = new Set();
@@ -286,6 +205,7 @@ function isLand(lat, lon) {
   return false;
 }
 
+
 function generateHeatmapPoints(vessels) {
   // 1. Collect threat sources: real positions + ghost projections
   const sources = [];
@@ -387,6 +307,9 @@ function generateHeatmapPoints(vessels) {
   }
   return out;
 }
+
+
+
 
 function getHeatVisualsForZoom(zoom) {
   if (zoom <= 8) return { radius: 22, blur: 18 };
@@ -494,7 +417,32 @@ function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(false);
 
-  const timeline = useMemo(() => getTimeline(MOCK_VESSELS), []);
+  // TanStack Query for Backend Integration
+  const { data: simData } = useQuery({
+    queryKey: ["simulation"],
+    queryFn: async () => {
+      try {
+        const res = await fetch("http://localhost:8000/api/v1/simulation");
+        if (res.status === 400) {
+          // Simulation probably not started, start it
+          await fetch("http://localhost:8000/api/v1/simulation/start", {
+            method: "POST",
+          });
+          const retryRes = await fetch("http://localhost:8000/api/v1/simulation");
+          return retryRes.json();
+        }
+        return res.json();
+      } catch (err) {
+        console.error("Backend fetch error:", err);
+        return { vessels: [] };
+      }
+    },
+    refetchInterval: 2000,
+  });
+
+  const MOCK_VESSELS = useMemo(() => simData?.vessels || [], [simData]);
+
+  const timeline = useMemo(() => getTimeline(MOCK_VESSELS), [MOCK_VESSELS]);
   const currentTs = timeline[timeIndex] || null;
 
   // Nautical Distance Calculation
@@ -506,8 +454,8 @@ function App() {
     const a =
       Math.sin(dLat / 2) ** 2 +
       Math.cos((p1.lat * Math.PI) / 180) *
-        Math.cos((p2.lat * Math.PI) / 180) *
-        Math.sin(dLon / 2) ** 2;
+      Math.cos((p2.lat * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
     return (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1);
   };
 
@@ -518,6 +466,13 @@ function App() {
       });
     }
   }, []);
+
+  useEffect(() => {
+    // Automatically advance time index if we're near the end of the available timeline
+    if (timeline.length > 0 && timeIndex >= timeline.length - 2 && !isPlaying) {
+      setTimeIndex(timeline.length - 1);
+    }
+  }, [timeline, isPlaying]);
 
   useEffect(() => {
     if (!isPlaying || timeline.length < 2) return undefined;
@@ -533,7 +488,7 @@ function App() {
         const point = getPointAtOrBefore(vessel.track, currentTs);
         return point ? { ...vessel, point } : null;
       }).filter(Boolean),
-    [currentTs],
+    [currentTs, MOCK_VESSELS],
   );
 
   const heatmapPoints = useMemo(
@@ -547,7 +502,7 @@ function App() {
     if (!base) return null;
     const point = getPointAtOrBefore(base.track, currentTs);
     return point ? { ...base, point } : { ...base, point: null };
-  }, [selectedVesselImo, currentTs]);
+  }, [selectedVesselImo, currentTs, MOCK_VESSELS]);
 
   useEffect(() => {
     if (selectedVesselDetails?.point && startPoint) {
@@ -760,11 +715,10 @@ function App() {
             {/* Heatmap Toggle */}
             <button
               onClick={() => setShowHeatmap((prev) => !prev)}
-              className={`absolute top-3 z-[1001] flex items-center gap-2 px-4 py-2.5 rounded-lg border backdrop-blur-md text-xs font-bold tracking-wide transition-all duration-300 shadow-lg ${
-                showHeatmap
-                  ? "bg-orange-500 border-orange-400 text-white shadow-orange-500/30"
-                  : "bg-[#1e293b] border-[#334155] text-white hover:bg-[#334155]"
-              } ${selectedVesselDetails ? "right-[21rem]" : "right-3"}`}
+              className={`absolute top-3 z-[1001] flex items-center gap-2 px-4 py-2.5 rounded-lg border backdrop-blur-md text-xs font-bold tracking-wide transition-all duration-300 shadow-lg ${showHeatmap
+                ? "bg-orange-500 border-orange-400 text-white shadow-orange-500/30"
+                : "bg-[#1e293b] border-[#334155] text-white hover:bg-[#334155]"
+                } ${selectedVesselDetails ? "right-[21rem]" : "right-3"}`}
             >
               <span
                 className={`w-2.5 h-2.5 rounded-full ${showHeatmap ? "bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]" : "bg-gray-400"}`}
