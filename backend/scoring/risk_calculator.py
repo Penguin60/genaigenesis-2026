@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from ingestion.ais_stream import fetch_live_ais_data, fetch_ocean_currents
 from ingestion.vessel_registry import fetch_registry_data

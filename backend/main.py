@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -15,6 +15,7 @@ from agents.orchestrator import query_agent
 from agents.info_agents import run_info_agents
 from ingestion.vessel_checks import check_retirement, get_ship_age
 from models.trajectory_vae import calculate_reconstruction_error
+from scoring.gap_check import analyze_ais_reporting_gaps
 
 app = FastAPI(
     title="Shadow Fleet Detection API",
@@ -35,10 +36,14 @@ app.state.sim_speed = 300
 
 class VesselRequest(BaseModel):
     mmsi: str
-    imo: str = None
+    imo: Optional[str] = None
 
 class QueryRequest(BaseModel):
     query: str
+
+class AnalysisRequest(BaseModel):
+    trajectory: List[Dict[str, Any]]
+    ship_type: str = "tanker"
 
 @app.get("/")
 def read_root():
@@ -123,6 +128,37 @@ def vessel_info(request: VesselRequest) -> Dict[str, Any]:
             "insurer": agent_results.get("insurer", {}),
             "registration": agent_results.get("registration", {}),
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/analysis")
+def run_analysis(request: AnalysisRequest) -> Dict[str, Any]:
+    """
+    Runs the heavier analysis pipeline over a trajectory using the trained ship-type VAE.
+    Returns a normalized movement anomaly score in [0, 1].
+    """
+    try:
+        if not request.trajectory:
+            raise HTTPException(status_code=400, detail="trajectory must contain at least one point")
+
+        ship_type = request.ship_type.lower().strip()
+        score = calculate_reconstruction_error(request.trajectory, ship_type=ship_type)
+        gap_check = analyze_ais_reporting_gaps(request.trajectory)
+        movement_alert = score > 0.05
+        gap_alert = bool(gap_check.get("suspicious", False))
+
+        return {
+            "ship_type": ship_type,
+            "trajectory_points": len(request.trajectory),
+            "movement_anomaly_score": round(score, 4),
+            "movement_alert": movement_alert,
+            "gap_check": gap_check,
+            "alert": movement_alert or gap_alert,
+        }
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
