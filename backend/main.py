@@ -125,7 +125,7 @@ def simulation():
             "mmsi": str(mmsi),
             "imo": f"900{mmsi}" if mmsi < 10000000 else str(mmsi),
             "type": pings[0]['TYPE'],
-            "status": "Anomaly Detected" if score > 0.1 else "Compliant",
+            "status": "Anomaly Detected" if score > 0.05 else "Compliant",
             "score": round(score, 4),
             "latest_point": {
                 "ts": latest['TIMESTAMP'].isoformat(),

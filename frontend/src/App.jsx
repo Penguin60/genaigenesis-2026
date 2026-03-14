@@ -461,6 +461,39 @@ function getVesselHeading(vessel, currentTs) {
 	return ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
 }
 
+function getVesselSpeed(vessel, currentTs) {
+    const track = vessel.track || [];
+    if (!currentTs || track.length < 2) return null;
+    const target = new Date(currentTs).getTime();
+    let idx = -1;
+    for (let i = 0; i < track.length; i++) {
+        if (new Date(track[i].ts).getTime() <= target) idx = i;
+    }
+    let p1, p2;
+    if (idx > 0) {
+        p1 = track[idx - 1];
+        p2 = track[idx];
+    } else if (idx === 0 && track.length > 1) {
+        p1 = track[0];
+        p2 = track[1];
+    } else {
+        return null;
+    }
+    // Haversine distance in nautical miles
+    const R = 3440.065;
+    const dLat = (p2.lat - p1.lat) * (Math.PI / 180);
+    const dLon = (p2.lon - p1.lon) * (Math.PI / 180);
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos((p1.lat * Math.PI) / 180) *
+            Math.cos((p2.lat * Math.PI) / 180) *
+            Math.sin(dLon / 2) ** 2;
+    const distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const timeHours = (new Date(p2.ts) - new Date(p1.ts)) / (1000 * 60 * 60);
+    if (timeHours === 0) return 0;
+    return distance / timeHours;
+}
+
 function headingToCompass(deg) {
 	const dirs = [
 		"N",
@@ -918,13 +951,17 @@ function App() {
 												selectedVesselDetails,
 												currentTs,
 											);
+                                            const s = getVesselSpeed(selectedVesselDetails, currentTs);
 											if (h === null) return null;
+                                            console.log(selectedVesselDetails)
 											return (
 												<div>
 													<span className="text-[11px] uppercase text-text-dim tracking-wide">
 														Heading
 													</span>
-													<div className="flex items-center gap-3 mt-1">
+                                                    <p>Reported Heading: {selectedVesselDetails.latest_point.course}</p>
+													<p>Actual Heading: </p>
+                                                    <div className="flex items-center gap-3 mt-1">
 														<span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-white/[0.06] border border-border">
 															<span
 																style={{
@@ -939,6 +976,28 @@ function App() {
 														</span>
 														<span className="font-mono text-sm">
 															{h.toFixed(1)}° {headingToCompass(h)}
+														</span>
+													</div>
+                                                    <span className="text-[11px] uppercase text-text-dim tracking-wide">
+														Speed
+													</span>
+                                                    <p>Reported Speed: {selectedVesselDetails.latest_point.speed} knots</p>
+                                                    <p>Actual Speed</p>
+                                                    <div className="flex items-center gap-3 mt-1">
+														<span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-white/[0.06] border border-border">
+															<span
+																style={{
+																	transform: `rotate(${h}deg)`,
+																	display: "inline-block",
+																	fontSize: "16px",
+																	lineHeight: 1,
+																}}
+															>
+																↑
+															</span>
+														</span>
+														<span className="font-mono text-sm">
+															{s.toFixed(1)}
 														</span>
 													</div>
 												</div>
