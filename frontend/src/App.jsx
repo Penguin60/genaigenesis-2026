@@ -11,9 +11,94 @@ import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import "leaflet.heat";
 
-// Backend-driven timeline integration replaced static mock vessels.
+import ChatWidget from "./components/ChatWidget";
 
-// SAMPLE DATA: PORT_SUGGESTIONS
+const BASE_VESSELS = [
+  // BAD VESSELS
+  {
+    name: "LUNA STAR",
+    imo: "9284731",
+    flag: "CM",
+    type: "Crude Oil Tanker",
+    status: "AIS Gap",
+    lat: "26.32",
+    lon: "56.21",
+  },
+  {
+    name: "CASPIAN WAVE",
+    imo: "9456012",
+    flag: "PA",
+    type: "Chemical Tanker",
+    status: "Rendezvous",
+    lat: "25.90",
+    lon: "56.85",
+  },
+  {
+    name: "NORTHERN DRIFT",
+    imo: "9387120",
+    flag: "MH",
+    type: "LPG Tanker",
+    status: "Route Deviation",
+    lat: "25.45",
+    lon: "57.20",
+  },
+  {
+    name: "BLACK MARLIN",
+    imo: "9612045",
+    flag: "PA",
+    type: "Crude Oil Tanker",
+    status: "Dark Activity",
+    lat: "26.05",
+    lon: "56.55",
+  },
+  {
+    name: "RED HORIZON",
+    imo: "9601934",
+    flag: "KH",
+    type: "General Cargo",
+    status: "Flag Hopping",
+    lat: "26.10",
+    lon: "55.80",
+  },
+  // GOOD VESSELS
+  {
+    name: "EVER GLORY",
+    imo: "9812345",
+    flag: "SG",
+    type: "Container Ship",
+    status: "Compliant",
+    lat: "25.20",
+    lon: "54.5",
+  },
+  {
+    name: "MAERSK SENTINEL",
+    imo: "9723410",
+    flag: "DK",
+    type: "Cargo",
+    status: "Compliant",
+    lat: "25.80",
+    lon: "55.90",
+  },
+  {
+    name: "PACIFIC RAY",
+    imo: "9910284",
+    flag: "JP",
+    type: "Bulk Carrier",
+    status: "Compliant",
+    lat: "26.45",
+    lon: "57.10",
+  },
+  {
+    name: "NORDIC PRIDE",
+    imo: "9456711",
+    flag: "NO",
+    type: "Oil Tanker",
+    status: "Compliant",
+    lat: "26.15",
+    lon: "56.95",
+  },
+];
+
 const PORT_SUGGESTIONS = [
   { name: "Port of Fujairah", lat: 25.11, lon: 56.36 },
   { name: "Port of Jebel Ali", lat: 25.01, lon: 55.06 },
@@ -942,6 +1027,7 @@ function App() {
           </div>
         </section>
       </main>
+      <ChatWidget vessels={vesselsAtTime} heatmapPoints={heatmapPoints} />
     </div>
   );
 }

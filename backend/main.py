@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
@@ -13,19 +14,21 @@ load_dotenv()
 from scoring.risk_calculator import calculate_sri
 from agents.orchestrator import query_agent
 from agents.info_agents import run_info_agents
+from agents.chat_agent import run_chat
 from ingestion.vessel_checks import check_retirement, get_ship_age
 from models.trajectory_vae import calculate_reconstruction_error
 from scoring.gap_check import analyze_ais_reporting_gaps
 
 app = FastAPI(
     title="Shadow Fleet Detection API",
-    description="Backend template for Maritime Navigator Hackathon Project.",
+    description="Backend for Maritime Navigator Hackathon Project.",
     version="1.0.0"
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -40,6 +43,11 @@ class VesselRequest(BaseModel):
 
 class QueryRequest(BaseModel):
     query: str
+
+
+class ChatRequest(BaseModel):
+    message: str
+    context: Optional[str] = ""
 
 class AnalysisRequest(BaseModel):
     trajectory: List[Dict[str, Any]]
@@ -131,6 +139,12 @@ def vessel_info(request: VesselRequest) -> Dict[str, Any]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/v1/chat")
+def chat(request: ChatRequest) -> Dict[str, Any]:
+    try:
+        response = run_chat(request.message, request.context or "")
+        return {"response": response}
+
 @app.post("/analysis")
 def run_analysis(request: AnalysisRequest) -> Dict[str, Any]:
     """
@@ -164,4 +178,4 @@ def run_analysis(request: AnalysisRequest) -> Dict[str, Any]:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="localhost", port=8000, reload=True)

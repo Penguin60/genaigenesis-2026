@@ -1,48 +1,42 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from ibm_watsonx_ai import Credentials
 from ibm_watsonx_ai.foundation_models import ModelInference
 from ibm_watsonx_ai.metanames import GenTextParamsMetaNames as GenParams
 
-load_dotenv()
-
-# --- Configuration from environment ---
-WATSONX_API_KEY = os.getenv("WATSONX_API_KEY", "")
-WATSONX_URL = os.getenv("WATSONX_URL", "https://ca-tor.ml.cloud.ibm.com")
-WATSONX_PROJECT_ID = os.getenv("WATSONX_PROJECT_ID", "")
-WATSONX_MODEL_ID = os.getenv("WATSONX_MODEL_ID", "meta-llama/llama-3-3-70b-instruct")
-
-# Generation parameters tuned for concise analytical responses
-GENERATE_PARAMS = {
-    GenParams.MAX_NEW_TOKENS: 300,
-    GenParams.TEMPERATURE: 0.2,
-    GenParams.TOP_P: 0.9,
-    GenParams.REPETITION_PENALTY: 1.1,
-}
-
+env_path = Path(__file__).resolve().parent.parent / '.env'
 _model_instance: ModelInference | None = None
 
-
 def get_watsonx_model() -> ModelInference:
-    """
-    Returns a singleton ModelInference instance.
-    Lazily initialised so the server can still start without credentials
-    (useful for local dev on non-agent endpoints).
-    """
     global _model_instance
+
+    load_dotenv(dotenv_path=env_path)
+
+    api_key = os.getenv("WATSONX_API_KEY", "")
+    project_id = os.getenv("WATSONX_PROJECT_ID", "")
+    url = os.getenv("WATSONX_URL", "https://ca-tor.ml.cloud.ibm.com")
+    model_id = os.getenv("WATSONX_MODEL_ID", "meta-llama/llama-3-3-70b-instruct")
+
     if _model_instance is None:
-        if not WATSONX_API_KEY or not WATSONX_PROJECT_ID:
+        if not api_key or not project_id:
+            # This is the error triggering in your screenshot
             raise RuntimeError(
-                "Missing WATSONX_API_KEY or WATSONX_PROJECT_ID in environment. "
-                "Set them in backend/.env"
+                f"Missing credentials in environment. checked: {env_path}"
             )
+
         _model_instance = ModelInference(
-            model_id=WATSONX_MODEL_ID,
-            params=GENERATE_PARAMS,
+            model_id=model_id,
+            params={
+                GenParams.MAX_NEW_TOKENS: 300,
+                GenParams.TEMPERATURE: 0.2,
+                GenParams.TOP_P: 0.9,
+                GenParams.REPETITION_PENALTY: 1.1,
+            },
             credentials=Credentials(
-                api_key=WATSONX_API_KEY,
-                url=WATSONX_URL,
+                api_key=api_key,
+                url=url,
             ),
-            project_id=WATSONX_PROJECT_ID,
+            project_id=project_id,
         )
     return _model_instance
