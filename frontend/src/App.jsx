@@ -1,4 +1,5 @@
-import { MapContainer, TileLayer, CircleMarker, Popup } from "react-leaflet";
+import { useState } from "react";
+import { MapContainer, TileLayer, CircleMarker } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
 const MOCK_VESSELS = [
@@ -32,6 +33,8 @@ const BADGE_STYLES = {
 };
 
 function App() {
+  const [selectedVessel, setSelectedVessel] = useState(null);
+
   return (
     <div className="flex flex-col min-h-screen">
       <header className="flex items-center gap-3.5 px-6 py-8 h-14 bg-surface border-b border-border">
@@ -41,7 +44,7 @@ function App() {
 
       <main className="flex-1 flex flex-col overflow-hidden">
         <section className="px-10 py-6 shrink-0">
-          <div className="w-full h-130 rounded-lg overflow-hidden border border-border">
+          <div className="w-full h-130 rounded-lg overflow-hidden border border-border relative">
             <MapContainer center={[26.2, 56.5]} zoom={8} className="h-full w-full">
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>'
@@ -52,16 +55,72 @@ function App() {
                   key={v.imo}
                   center={[parseFloat(v.lat), parseFloat(v.lon)]}
                   radius={8}
-                  pathOptions={{ color: "#dc2626", fillColor: "#ef4444", fillOpacity: 0.9, weight: 2 }}
-                >
-                  <Popup>
-                    <strong>{v.name}</strong><br />
-                    IMO: {v.imo}<br />
-                    {v.type} — {v.status}
-                  </Popup>
-                </CircleMarker>
+                  pathOptions={{
+                    color: selectedVessel?.imo === v.imo ? "#fff" : "#dc2626",
+                    fillColor: "#ef4444",
+                    fillOpacity: 0.9,
+                    weight: selectedVessel?.imo === v.imo ? 3 : 2,
+                  }}
+                  eventHandlers={{
+                    click: () => setSelectedVessel(selectedVessel?.imo === v.imo ? null : v),
+                  }}
+                />
               ))}
             </MapContainer>
+
+            {/* Side panel */}
+            <div
+              className={`absolute top-0 right-0 h-full w-80 bg-surface/95 backdrop-blur-sm border-l border-border z-[1000] transition-transform duration-300 ease-in-out ${
+                selectedVessel ? "translate-x-0" : "translate-x-full"
+              }`}
+            >
+              {selectedVessel && (
+                <div className="p-5 h-full overflow-y-auto">
+                  <div className="flex items-center justify-between mb-5">
+                    <h3 className="text-lg font-bold text-text">{selectedVessel.name}</h3>
+                    <button
+                      onClick={() => setSelectedVessel(null)}
+                      className="text-text-dim hover:text-text text-xl leading-none cursor-pointer"
+                    >
+                      &times;
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <span className="text-[11px] uppercase tracking-wide text-text-dim">Status</span>
+                      <div className="mt-1">
+                        <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${BADGE_STYLES[selectedVessel.status.replace(/\s/g, "-").toLowerCase()] || ""}`}>
+                          {selectedVessel.status}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-[11px] uppercase tracking-wide text-text-dim">IMO Number</span>
+                      <p className="text-text font-mono text-sm mt-1">{selectedVessel.imo}</p>
+                    </div>
+
+                    <div>
+                      <span className="text-[11px] uppercase tracking-wide text-text-dim">Flag State</span>
+                      <p className="text-text text-sm mt-1">{selectedVessel.flag}</p>
+                    </div>
+
+                    <div>
+                      <span className="text-[11px] uppercase tracking-wide text-text-dim">Vessel Type</span>
+                      <p className="text-text text-sm mt-1">{selectedVessel.type}</p>
+                    </div>
+
+                    <div>
+                      <span className="text-[11px] uppercase tracking-wide text-text-dim">Position</span>
+                      <p className="text-text font-mono text-sm mt-1">
+                        {selectedVessel.lat}°N, {selectedVessel.lon}°E
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </section>
 
@@ -82,7 +141,11 @@ function App() {
                 {MOCK_VESSELS.map((v) => {
                   const badgeKey = v.status.replace(/\s/g, "-").toLowerCase();
                   return (
-                    <tr key={v.imo} className="hover:bg-white/[0.02]">
+                    <tr
+                      key={v.imo}
+                      className={`hover:bg-white/[0.02] cursor-pointer ${selectedVessel?.imo === v.imo ? "bg-white/[0.04]" : ""}`}
+                      onClick={() => setSelectedVessel(selectedVessel?.imo === v.imo ? null : v)}
+                    >
                       <td className="px-3 py-2.5 border-b border-border whitespace-nowrap">{v.name}</td>
                       <td className="px-3 py-2.5 border-b border-border whitespace-nowrap font-mono text-xs">{v.imo}</td>
                       <td className="px-3 py-2.5 border-b border-border whitespace-nowrap">{v.flag}</td>
