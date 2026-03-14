@@ -1,9 +1,15 @@
 import json
+import os
+from pathlib import Path
 import railtracks as rt
 from dotenv import load_dotenv
 from agents.watson_client import get_watsonx_model
 
-load_dotenv()
+env_path = Path(__file__).resolve().parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
+
+WATSONX_API_KEY = os.getenv("WATSONX_API_KEY")
+WATSONX_PROJECT_ID = os.getenv("WATSONX_PROJECT_ID")
 
 SYSTEM_PROMPT = """You are VANGUARD Advisor, an AI maritime safety assistant integrated into the VANGUARD Shadow Fleet Monitor. Your role is to help operators navigate safely by advising them based on real-time threat intelligence from the system.
 

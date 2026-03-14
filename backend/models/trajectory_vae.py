@@ -245,12 +245,9 @@ def calculate_reconstruction_error(trajectory: List[Dict[str, float]], ship_type
     """
     Evaluates movement (speed/heading). Spiking reconstruction error indicates spoofing.
     """
-<<<<<<< HEAD
     if not TORCH_AVAILABLE:
         return 0.0
-=======
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
->>>>>>> 4ce301ab57313891530243193a76ba1a0c58c78b
     # 1. Prepare the trajectory data into a Tensor matching the VAE input shape
     # We need a shape of (1, max_seq_len, 7) for (batch_size, seq_len, features)
     max_seq_len = 50
