@@ -1,13 +1,4 @@
-"""
-train_all.py — Train one VAE per ship type and save model weights.
 
-Usage:
-    python train_all.py
-    python train_all.py --epochs 20 --batch-size 32 --lr 0.001
-
-Ship types trained: cargo, fishing, passenger, tanker
-Output: backend/models/vae_<ship_type>.pth for each type
-"""
 
 import argparse
 import glob
@@ -16,7 +7,7 @@ import sys
 
 import torch
 
-# Make sure the backend directory is on the path
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models.trajectory_vae import TrajectoryDataset, TransformerVAE, vae_loss
@@ -24,16 +15,16 @@ from torch.utils.data import DataLoader
 
 SHIP_TYPES = ['cargo', 'fishing', 'passenger', 'tanker']
 
-# Root of the data folder relative to this script
+
 DATA_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
 MODELS_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Auto-detect GPU
+
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def find_csvs_for_ship_type(ship_type: str):
-    """Glob all monthly CSVs for a given ship type across all years."""
+
     pattern = os.path.join(DATA_ROOT, '*', ship_type, '**', '*.csv')
     files = glob.glob(pattern, recursive=True)
     if not files:
@@ -80,7 +71,6 @@ def train_ship_type(ship_type: str, epochs: int, batch_size: int, lr: float):
         avg_loss = train_loss / len(dataset)
         print(f"  Epoch [{epoch+1:>3}/{epochs}]  Avg Loss: {avg_loss:.4f}")
 
-    # Save model weights
     output_path = os.path.join(MODELS_DIR, f'vae_{ship_type}.pth')
     torch.save(model.state_dict(), output_path)
     print(f"  Saved model to: {output_path}")

@@ -10,65 +10,54 @@ def generate_timestamp(base_time, index, interval_minutes=5):
 
 def generate_sequence(track_id, mmsi, ship_type, is_anomalous=False, seq_len=50):
     rows = []
-    # Randomize start hour so it's not the same every run
     start_hour = random.randint(0, 23)
     base_time = datetime(2026, 3, 14, start_hour, 0, 0)
     
-    # Start coordinates Close to Strait of Hormuz
     lon = random.uniform(55.8, 56.5)
     lat = random.uniform(26.3, 27.0)
     
-    # Profile-based movement
     if ship_type in ['cargo', 'tanker']:
-        speed = random.uniform(8, 14)  # Slow and steady
-        course = random.uniform(20, 70) # Straight line
+        speed = random.uniform(8, 14)
+        course = random.uniform(20, 70)
     elif ship_type == 'passenger':
-        speed = random.uniform(16, 24) # Fast ferries
-        course = random.uniform(20, 70) # Straight line
+        speed = random.uniform(16, 24)
+        course = random.uniform(20, 70)
     elif ship_type == 'fishing':
-        speed = random.uniform(4, 12)  # Slow
-        course = random.uniform(0, 360) # Wandering
+        speed = random.uniform(4, 12)
+        course = random.uniform(0, 360)
     else:
         speed = random.uniform(8, 15)
         course = random.uniform(20, 70)
             
-    # Randomize when the bad thing happens
     anomaly_point = random.randint(10, 40)
     anomaly_type = random.choice(['speed', 'jump', 'dark', 'zigzag']) if is_anomalous else 'none'
     
     for i in range(seq_len):
         current_time = base_time + timedelta(minutes=i * 5)
         
-        # Physics update
         dt_hours = 5 / 60.0
-        # rough dist ~ speed * dt (very simplified nautical miles to degrees)
         dist = speed * dt_hours
         lon += (dist / 60.0) * np.sin(np.radians(course))
         lat += (dist / 60.0) * np.cos(np.radians(course))
         
-        # Add jitter and Waypoint Turns
         if ship_type == 'fishing':
-            # Fishing boats wander a lot while trawling
             course = (course + random.uniform(-15, 15)) % 360
             display_speed = speed + random.uniform(-2.0, 2.0)
             display_course = course
         else:
-            # Commercial ships stay steady BUT have Waypoints
-            # 5% chance to hit a turn in the shipping lane
             if random.random() < 0.05:
                 course = (course + random.uniform(-25, 25)) % 360
                 
             display_speed = speed + random.uniform(-0.1, 0.1)
             display_course = (course + random.uniform(-0.5, 0.5)) % 360
             
-        # Inject Anomaly
         if is_anomalous and i == anomaly_point:
             if anomaly_type == 'speed':
-                display_speed = 45.0 # Way too fast
+                display_speed = 45.0
             elif anomaly_type == 'jump':
-                lon += 2.0 # Sudden 120 mile teleport
+                lon += 2.0
             elif anomaly_type == 'dark':
-                base_time += timedelta(hours=random.randint(4, 12)) # Randomized gap
+                base_time += timedelta(hours=random.randint(4, 12))
             elif anomaly_type == 'zigzag':
                 display_course = (display_course + 180) % 360
 
@@ -76,7 +65,7 @@ def generate_sequence(track_id, mmsi, ship_type, is_anomalous=False, seq_len=50)
             'CRAFT_ID': f"SHIP_{mmsi}",
             'MMSI': mmsi,
             'TYPE': ship_type,
-            'ANOMALY_TYPE': anomaly_type if is_anomalous else 'none', # For observation
+            'ANOMALY_TYPE': anomaly_type if is_anomalous else 'none',
             'TIMESTAMP': current_time.strftime("%Y-%m-%d %I:%M:%S %p"),
             'LON': lon,
             'LAT': lat,
@@ -85,7 +74,6 @@ def generate_sequence(track_id, mmsi, ship_type, is_anomalous=False, seq_len=50)
             'Track_ID': track_id
         })
         
-    # Append END row
     rows.append({
         'CRAFT_ID': 'END',
         'MMSI': mmsi,
@@ -110,15 +98,12 @@ def main():
     
     all_rows = []
     
-    # Distribution of ship types in the strait
     types = ['cargo'] * 45 + ['tanker'] * 35 + ['fishing'] * 10 + ['passenger'] * 10
     
-    # Generate 80 normal
     for i in range(total_sequences - anomalous_count):
         ship_type = random.choice(types)
         all_rows.extend(generate_sequence(f"TR_{i}", 1000000 + i, ship_type, is_anomalous=False))
         
-    # Generate 20 anomalous
     for i in range(anomalous_count):
         idx = (total_sequences - anomalous_count) + i
         ship_type = random.choice(types)
