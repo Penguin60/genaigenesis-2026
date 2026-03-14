@@ -377,13 +377,13 @@
                                 {/* Heatmap Toggle */}
                                 <button
                                   onClick={() => setShowHeatmap((prev) => !prev)}
-                                  className={`absolute top-3 z-[1001] flex items-center gap-2 px-3 py-2 rounded-lg border backdrop-blur-sm text-xs font-semibold transition-all duration-300 ${
+                                  className={`absolute top-3 z-[1001] flex items-center gap-2 px-4 py-2.5 rounded-lg border backdrop-blur-md text-xs font-bold tracking-wide transition-all duration-300 shadow-lg ${
                                     showHeatmap
-                                      ? "bg-red-500/20 border-red-500/40 text-red-400"
-                                      : "bg-surface/90 border-border text-text-dim hover:text-text"
+                                      ? "bg-orange-500 border-orange-400 text-white shadow-orange-500/30"
+                                      : "bg-[#1e293b] border-[#334155] text-white hover:bg-[#334155]"
                                   } ${selectedVesselDetails ? "right-[21rem]" : "right-3"}`}
                                 >
-                                  <span className={`w-2 h-2 rounded-full ${showHeatmap ? "bg-red-400 shadow-[0_0_6px_rgba(248,113,113,0.6)]" : "bg-text-dim/50"}`} />
+                                  <span className={`w-2.5 h-2.5 rounded-full ${showHeatmap ? "bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]" : "bg-gray-400"}`} />
                                   HEATMAP
                                 </button>
 
