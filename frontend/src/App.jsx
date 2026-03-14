@@ -536,7 +536,12 @@ function App() {
   const MOCK_VESSELS = useMemo(() => simData?.vessels || [], [simData]);
 
   const timeline = useMemo(() => getTimeline(MOCK_VESSELS), [MOCK_VESSELS]);
-  const currentTs = timeline[timeIndex] || null;
+  // When following live, always pin to the last index synchronously
+  // to avoid the 1-frame lag from useEffect that causes the slider to jump back.
+  const effectiveTimeIndex = followLatest && timeline.length > 0
+    ? timeline.length - 1
+    : Math.min(timeIndex, Math.max(timeline.length - 1, 0));
+  const currentTs = timeline[effectiveTimeIndex] || null;
 
   // Nautical Distance Calculation
   const calculateDistance = (p1, p2) => {
@@ -829,7 +834,7 @@ function App() {
                   type="range"
                   min={0}
                   max={Math.max(timeline.length - 1, 0)}
-                  value={timeIndex}
+                  value={effectiveTimeIndex}
                   onChange={(e) => {
                     const nextIndex = Number(e.target.value);
                     const lastIndex = Math.max(timeline.length - 1, 0);
