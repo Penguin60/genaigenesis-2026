@@ -1,0 +1,35 @@
+{
+  "endpoint": "/api/v1/info",
+  "method": "POST",
+  "valid_payloads": [
+    {
+      "name": "mmsi_only",
+      "body": {
+        "mmsi": "477999100"
+      }
+    },
+    {
+      "name": "mmsi_and_imo",
+      "body": {
+        "mmsi": "636092681",
+        "imo": "9284731"
+      }
+    },
+    {
+      "name": "alternate_ship_pair",
+      "body": {
+        "mmsi": "311000001",
+        "imo": "9456012"
+      }
+    }
+  ],
+  "invalid_payloads": [
+    {
+      "name": "missing_mmsi",
+      "body": {
+        "imo": "9284731"
+      },
+      "expected_status": 422
+    }
+  ]
+}

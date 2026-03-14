@@ -1,5 +1,4 @@
 from typing import Dict, Any, Optional
-from datetime import datetime
 
 from ingestion.vessel_registry import fetch_registry_data
 from ingestion.watsonx_data import query_knowledge_lakehouse
@@ -14,13 +13,22 @@ def check_retirement(imo: Optional[str] = None, mmsi: Optional[str] = None) -> D
     Checks whether the vessel is flagged as retired or scrapped
     based on registry data.
     """
-    registry = fetch_registry_data(imo) if imo else {}
+    registry = fetch_registry_data(imo=imo, mmsi=mmsi) if (imo or mmsi) else {}
     status = registry.get("status", "Unknown")
-    is_retired = status in ("Retired", "Scrapped")
+    normalized_status = str(status).strip().lower()
+    is_retired = normalized_status in {"retired", "scrapped", "decommissioned"}
+    age_years = registry.get("age_years")
+    should_retire = bool(is_retired)
+
+    if isinstance(age_years, int) and age_years > 15:
+        should_retire = True
 
     return {
         "is_retired": is_retired,
+        "should_retire": should_retire,
         "status": status,
+        "age_years": age_years,
+        "source": registry.get("source", "unknown"),
         "imo": imo,
         "mmsi": mmsi,
     }
@@ -28,15 +36,19 @@ def check_retirement(imo: Optional[str] = None, mmsi: Optional[str] = None) -> D
 
 def get_ship_age(imo: Optional[str] = None, mmsi: Optional[str] = None) -> Dict[str, Any]:
     """
-    Returns the age of the vessel and an approximate build year.
+    Returns whether vessel age is above 15 years.
     """
-    registry = fetch_registry_data(imo) if imo else {}
-    age_years = registry.get("age_years", None)
-    build_year = (datetime.now().year - age_years) if age_years is not None else None
+    registry = fetch_registry_data(imo=imo, mmsi=mmsi) if (imo or mmsi) else {}
+    age_years = registry.get("age_years")
+    is_over_15_years = False
+
+    if isinstance(age_years, int) and age_years > 15:
+        is_over_15_years = True
 
     return {
         "age_years": age_years,
-        "build_year": build_year,
+        "is_over_15_years": is_over_15_years,
+        "source": registry.get("source", "unknown"),
         "imo": imo,
         "mmsi": mmsi,
     }
@@ -65,7 +77,7 @@ def get_registration_data(imo: Optional[str] = None, mmsi: Optional[str] = None)
     Gathers raw flag/registration data from the vessel registry.
     This data is passed to the registration analysis agent.
     """
-    registry = fetch_registry_data(imo) if imo else {}
+    registry = fetch_registry_data(imo=imo, mmsi=mmsi) if (imo or mmsi) else {}
     flag = registry.get("flag", "Unknown")
     foc_flags = {"Comoros", "Gabon", "Cook Islands", "Palau", "Togo", "Cameroon"}
 
