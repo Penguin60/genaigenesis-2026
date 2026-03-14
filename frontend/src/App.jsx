@@ -45,6 +45,7 @@ function App() {
       <main className="flex-1 flex flex-col overflow-hidden">
         <section className="px-10 py-6 shrink-0">
           <div className="w-full h-130 rounded-lg overflow-hidden border border-border relative">
+             {/* Map here, later add functionality to do the separate from destination */}
             <MapContainer center={[26.2, 56.5]} zoom={8} className="h-full w-full">
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>'
@@ -117,6 +118,35 @@ function App() {
                         {selectedVessel.lat}°N, {selectedVessel.lon}°E
                       </p>
                     </div>
+                    {/* add for search directions to */}
+                    <div className="pt-2">
+                      {/* Label is just text-dim to match the other labels */}
+                      <span className="text-[11px] uppercase tracking-wide text-text-dim">Find route</span>
+
+                      <div className="relative mt-2">
+                        {/* The Input field, styled like a search bar, dark theme */}
+                        <input
+                          type="text"
+                          placeholder="Enter destination port or coordinates..."
+                          className="w-full h-11 pl-5 pr-12 text-sm bg-bg border border-border rounded-full text-text placeholder:text-text-dim focus:ring-1 focus:ring-accent focus:border-accent transition-all duration-200"
+                        />
+
+                        {/* The Search/Direction icon, positioned inside the right of the bar */}
+                        <button className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 flex items-center justify-center rounded-full text-accent hover:bg-white/[0.04]">
+                          {/* This is a simple SVG for a Search icon, matching your CSS theme */}
+                          <svg 
+                            viewBox="0 0 24 24" 
+                            className="h-5 w-5" 
+                            fill="none" 
+                            stroke="currentColor" 
+                            strokeWidth="2.5"
+                          >
+                            <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                    {/*  */}
                   </div>
                 </div>
               )}
