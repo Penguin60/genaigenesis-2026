@@ -86,18 +86,21 @@ class TrajectoryDataset(Dataset):
             
         dt_hours = np.clip(dt_hours, 0.0, MAX_DT_HOURS)
 
-        # Encode COURSE as sin/cos to handle circularity (0° and 360° are the same)
+        # Calculate Velocity Components (implied speed in degrees per hour)
+        # We use fillna(0) to handle the first point in a sequence
+        dt_adj = dt_hours.replace(0, 1.0) # Avoid division by zero
+        v_lon = raw['LON'].diff().fillna(0.0) / dt_adj
+        v_lat = raw['LAT'].diff().fillna(0.0) / dt_adj
+
+        # Encode COURSE as sin/cos
         course_rad = raw['COURSE'] * (3.141592653589793 / 180.0)
 
-        # --- Normalize all features to roughly [-1, 1] or [0, 1] ---
-        # LON: [-180, 180] → [-1, 1]
-        # LAT: [-90,  90]  → [-1, 1]
-        # sin/cos COURSE: already in [-1, 1]
-        # SPEED: [0, 25]   → [0, 1]
-        # DT:    [0, 12]   → [0, 1]
+        # --- Normalize all features ---
+        # v_LON/v_LAT: Max expected change is ~0.25 deg/hour (at 15 knots) -> / 0.25
+        # We remove hard clipping here so anomalies stay HUGE for the VAE to see
         features = np.stack([
-            raw['LON'].values / 180.0,
-            raw['LAT'].values / 90.0,
+            v_lon.values / 0.25,
+            v_lat.values / 0.25,
             np.sin(course_rad.values),
             np.cos(course_rad.values),
             raw['SPEED'].values / MAX_SPEED_KNOTS,
@@ -250,11 +253,17 @@ def calculate_reconstruction_error(trajectory: List[Dict[str, float]], ship_type
     dt_hours = np.clip(dt_hours, 0.0, MAX_DT_HOURS)
     
     raw = df_seq[['LON', 'LAT', 'COURSE', 'SPEED']].astype(float)
+    
+    # Calculate Velocity Components (implied speed in degrees per hour)
+    dt_adj = dt_hours.replace(0, 1.0)
+    v_lon = raw['LON'].diff().fillna(0.0) / dt_adj
+    v_lat = raw['LAT'].diff().fillna(0.0) / dt_adj
+    
     course_rad = raw['COURSE'] * (3.141592653589793 / 180.0)
     # Apply same normalization as training
     features = np.stack([
-        raw['LON'].values / 180.0,
-        raw['LAT'].values / 90.0,
+        v_lon.values / 0.25,
+        v_lat.values / 0.25,
         np.sin(course_rad.values),
         np.cos(course_rad.values),
         raw['SPEED'].values / MAX_SPEED_KNOTS,
@@ -284,21 +293,27 @@ def calculate_reconstruction_error(trajectory: List[Dict[str, float]], ship_type
     # 3. Calculate Reconstruction Error (MSE Loss between Input and Output)
     with torch.no_grad():
         recon_batch, _, _ = model(features_tensor)
+        
         # We only want basic Mean Squared Error for the anomaly score
-        # Specifically only calculate error on the non-padded values
+        # CRITICAL: We skip the first 2 frames so the "0 velocity start" doesn't ruin legitimate scores
         actual_len = min(len(df_seq), max_seq_len)
-        mse_error = nn.functional.mse_loss(
-            recon_batch[0, :actual_len, :], 
-            features_tensor[0, :actual_len, :]
-        ).item()
+        if actual_len > 2:
+            # Calculate MSE per timestep: (seq_len, feature_dim) -> (seq_len,)
+            per_ping_mse = torch.mean((recon_batch[0, 2:actual_len, :] - features_tensor[0, 2:actual_len, :])**2, dim=1)
+            # Use max to catch localized anomalies (like a single teleport jump)
+            mse_error = torch.max(per_ping_mse).item()
+        else:
+            mse_error = 0.0
 
     # 4. Synthesize Spoofing Score
     # The MSE represents how anomalous the path is compared to normal routes.
     # Training loss settled at ~8.3 per batch (sum reduction), which equates 
     # to roughly ~0.033 MSE per element (mean reduction) on normalized data.
     
-    baseline_mse = 0.05 # Anything below this is considered completely normal
-    max_mse = 0.20      # Anything above this is considered undeniable spoofing
+    # Updated for MAX MSE logic: 
+    # Legit jitter can hit ~1.0, but a teleport jump hits 50.0+
+    baseline_mse = 1.0  # Ignore anything that isn't a massive physical jump
+    max_mse = 8.0      # Anything above this is 100% spoofed
     
     spoofing_alert_score = (mse_error - baseline_mse) / (max_mse - baseline_mse)
     return max(0.0, min(spoofing_alert_score, 1.0))
