@@ -1,42 +1,78 @@
-import { useState } from "react";
-import { MapContainer, TileLayer, CircleMarker } from "react-leaflet";
+import { useState, useEffect } from "react";
+import { MapContainer, TileLayer, CircleMarker, Polyline } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
 const MOCK_VESSELS = [
+  // BAD VESSELS
   { name: "LUNA STAR", imo: "9284731", flag: "CM", type: "Crude Oil Tanker", status: "AIS Gap", lat: "26.32", lon: "56.21" },
-  { name: "ORIENT PEARL", imo: "9310284", flag: "TG", type: "Bulk Carrier", status: "Flag Change", lat: "26.58", lon: "56.48" },
   { name: "CASPIAN WAVE", imo: "9456012", flag: "PA", type: "Chemical Tanker", status: "Rendezvous", lat: "25.90", lon: "56.85" },
-  { name: "ATLAS VOYAGER", imo: "9523841", flag: "LR", type: "Oil Tanker", status: "AIS Gap", lat: "26.75", lon: "56.10" },
   { name: "NORTHERN DRIFT", imo: "9387120", flag: "MH", type: "LPG Tanker", status: "Route Deviation", lat: "25.45", lon: "57.20" },
-  { name: "RED HORIZON", imo: "9601934", flag: "KH", type: "General Cargo", status: "Flag Change", lat: "26.10", lon: "55.80" },
-  { name: "SILVANA", imo: "9478561", flag: "GN", type: "Crude Oil Tanker", status: "AIS Gap", lat: "26.50", lon: "56.70" },
-  { name: "ZENITH FORTUNE", imo: "9534209", flag: "PA", type: "Bulk Carrier", status: "Rendezvous", lat: "25.70", lon: "57.05" },
-  { name: "BLACK MARLIN", imo: "9612045", flag: "PA", type: "Crude Oil Tanker", status: "AIS Gap", lat: "26.05", lon: "56.55" },
-  { name: "GULF SPIRIT", imo: "9345678", flag: "MH", type: "Oil Tanker", status: "Flag Change", lat: "26.88", lon: "56.32" },
-  { name: "IRON PHOENIX", imo: "9498321", flag: "LR", type: "Bulk Carrier", status: "Route Deviation", lat: "25.62", lon: "57.40" },
-  { name: "JADE EMPRESS", imo: "9567012", flag: "TG", type: "Chemical Tanker", status: "Rendezvous", lat: "26.42", lon: "55.95" },
-  { name: "KARACHI SUN", imo: "9623410", flag: "CM", type: "LPG Tanker", status: "AIS Gap", lat: "25.38", lon: "56.78" },
-  { name: "MERIDIAN STAR", imo: "9701234", flag: "GN", type: "General Cargo", status: "Flag Change", lat: "26.68", lon: "56.90" },
-  { name: "NIGHT HERON", imo: "9415678", flag: "KH", type: "Crude Oil Tanker", status: "Route Deviation", lat: "25.85", lon: "57.15" },
-  { name: "OMAN BREEZE", imo: "9389012", flag: "PA", type: "Oil Tanker", status: "AIS Gap", lat: "26.20", lon: "56.05" },
-  { name: "PACIFIC DAWN", imo: "9543210", flag: "MH", type: "Chemical Tanker", status: "Rendezvous", lat: "25.55", lon: "56.42" },
-  { name: "ROYAL CREST", imo: "9678901", flag: "LR", type: "Bulk Carrier", status: "Flag Change", lat: "26.95", lon: "56.60" },
-  { name: "STORM PETREL", imo: "9456789", flag: "TG", type: "LPG Tanker", status: "Route Deviation", lat: "25.72", lon: "57.30" },
-  { name: "TITAN GLORY", imo: "9512345", flag: "CM", type: "Crude Oil Tanker", status: "AIS Gap", lat: "26.15", lon: "56.38" },
+  { name: "BLACK MARLIN", imo: "9612045", flag: "PA", type: "Crude Oil Tanker", status: "Dark Activity", lat: "26.05", lon: "56.55" },
+  { name: "RED HORIZON", imo: "9601934", flag: "KH", type: "General Cargo", status: "Flag Hopping", lat: "26.10", lon: "55.80" },
+
+  // GOOD VESSELS
+  { name: "EVER GLORY", imo: "9812345", flag: "SG", type: "Container Ship", status: "Compliant", lat: "25.20", lon: "55.50" },
+  { name: "MAERSK SENTINEL", imo: "9723410", flag: "DK", type: "Cargo", status: "Compliant", lat: "25.80", lon: "55.90" },
+  { name: "PACIFIC RAY", imo: "9910284", flag: "JP", type: "Bulk Carrier", status: "Compliant", lat: "26.45", lon: "57.10" },
+  { name: "NORDIC PRIDE", imo: "9456711", flag: "NO", type: "Oil Tanker", status: "Compliant", lat: "26.15", lon: "56.95" }
+];
+
+const PORT_SUGGESTIONS = [
+  { name: "Port of Fujairah", lat: 25.11, lon: 56.36 },
+  { name: "Port of Jebel Ali", lat: 25.01, lon: 55.06 },
+  { name: "Bandar Abbas", lat: 27.18, lon: 56.26 },
+  { name: "Muscat Port", lat: 23.62, lon: 58.56 },
 ];
 
 const BADGE_STYLES = {
-  "ais-gap": "bg-badge-red-bg text-badge-red",
-  "flag-change": "bg-badge-amber-bg text-badge-amber",
-  "rendezvous": "bg-badge-purple-bg text-badge-purple",
-  "route-deviation": "bg-badge-blue-bg text-badge-blue",
+  // good status
+  "compliant": "bg-[#16a34a]/20 text-[#16a34a]",
+
+  // bad status (shades of red, depending on what kind of activity is going on)
+  "ais-gap": "bg-[#991b1b]/20 text-[#ef4444]", 
+  "dark-activity": "bg-[#7f1d1d]/30 text-[#dc2626]",
+  "rendezvous": "bg-[#450a0a]/30 text-[#f87171]",
+  "route-deviation": "bg-[#991b1b]/20 text-[#ef4444]",
+  "flag-hopping": "bg-[#7f1d1d]/30 text-[#dc2626]",
 };
 
 function App() {
   const [selectedVessel, setSelectedVessel] = useState(null);
+  const [userGPS, setUserGPS] = useState(null);
+  const [startPoint, setStartPoint] = useState(null);
+  const [inputValue, setInputValue] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [distance, setDistance] = useState(null);
+
+  // Get User GPS location
+  useEffect(() => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        setUserGPS({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+      });
+    }
+  }, []);
+
+  // Nautical Distance Calculation
+  const calculateDistance = (p1, p2) => {
+    if (!p1 || !p2) return null;
+    const R = 3440.065; 
+    const dLat = (p2.lat - p1.lat) * (Math.PI / 180);
+    const dLon = (p2.lon - p1.lon) * (Math.PI / 180);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(p1.lat * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    return (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1);
+  };
+
+  useEffect(() => {
+    if (selectedVessel && startPoint) {
+      setDistance(calculateDistance(startPoint, { lat: parseFloat(selectedVessel.lat), lon: parseFloat(selectedVessel.lon) }));
+    } else {
+      setDistance(null);
+    }
+  }, [selectedVessel, startPoint]);
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen bg-bg text-text">
       <header className="flex items-center gap-3.5 px-6 py-8 h-14 bg-surface border-b border-border">
         <span className="font-bold text-4xl tracking-[3px] text-accent">VANGUARD</span>
         <span className="text-xl text-text-dim">Shadow Fleet Monitor</span>
@@ -45,108 +81,118 @@ function App() {
       <main className="flex-1 flex flex-col overflow-hidden">
         <section className="px-10 py-6 shrink-0">
           <div className="w-full h-130 rounded-lg overflow-hidden border border-border relative">
-             {/* Map here, later add functionality to do the separate from destination */}
-            <MapContainer center={[26.2, 56.5]} zoom={8} className="h-full w-full">
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>'
-                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+            <MapContainer center={[26.2, 56.5]} zoom={8} className="h-full w-full z-0">
+              <TileLayer 
+                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" 
+                attribution='&copy; OpenStreetMap'
               />
+              {startPoint && selectedVessel && (
+                <Polyline 
+                  positions={[[startPoint.lat, startPoint.lon], [parseFloat(selectedVessel.lat), parseFloat(selectedVessel.lon)]]}
+                  pathOptions={{ color: '#5b8def', weight: 2, dashArray: '5, 10' }}
+                />
+              )}
               {MOCK_VESSELS.map((v) => (
                 <CircleMarker
                   key={v.imo}
                   center={[parseFloat(v.lat), parseFloat(v.lon)]}
-                  radius={8}
+                  radius={5}
                   pathOptions={{
                     color: selectedVessel?.imo === v.imo ? "#fff" : "#dc2626",
                     fillColor: "#ef4444",
                     fillOpacity: 0.9,
                     weight: selectedVessel?.imo === v.imo ? 3 : 2,
                   }}
-                  eventHandlers={{
-                    click: () => setSelectedVessel(selectedVessel?.imo === v.imo ? null : v),
-                  }}
+                  eventHandlers={{ click: () => setSelectedVessel(v) }}
                 />
               ))}
+              
             </MapContainer>
 
-            {/* Side panel */}
-            <div
-              className={`absolute top-0 right-0 h-full w-80 bg-surface/95 backdrop-blur-sm border-l border-border z-[1000] transition-transform duration-300 ease-in-out ${
-                selectedVessel ? "translate-x-0" : "translate-x-full"
-              }`}
-            >
+            {/* Sidebar Panel */}
+            <div className={`absolute top-0 right-0 h-full w-80 bg-surface/95 backdrop-blur-sm border-l border-border z-[1001] transition-transform duration-300 ${selectedVessel ? "translate-x-0" : "translate-x-full"}`}>
               {selectedVessel && (
                 <div className="p-5 h-full overflow-y-auto">
-                  <div className="flex items-center justify-between mb-5">
-                    <h3 className="text-lg font-bold text-text">{selectedVessel.name}</h3>
-                    <button
-                      onClick={() => setSelectedVessel(null)}
-                      className="text-text-dim hover:text-text text-xl leading-none cursor-pointer"
-                    >
-                      &times;
-                    </button>
+                  <div className="flex justify-between mb-5">
+                    <h3 className="text-lg font-bold">{selectedVessel.name}</h3>
+                    <button onClick={() => setSelectedVessel(null)} className="text-text-dim hover:text-text text-xl">&times;</button>
                   </div>
 
                   <div className="space-y-4">
                     <div>
-                      <span className="text-[11px] uppercase tracking-wide text-text-dim">Status</span>
+                      <span className="text-[11px] uppercase text-text-dim tracking-wide">Status</span>
                       <div className="mt-1">
                         <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${BADGE_STYLES[selectedVessel.status.replace(/\s/g, "-").toLowerCase()] || ""}`}>
                           {selectedVessel.status}
                         </span>
                       </div>
                     </div>
-
                     <div>
-                      <span className="text-[11px] uppercase tracking-wide text-text-dim">IMO Number</span>
-                      <p className="text-text font-mono text-sm mt-1">{selectedVessel.imo}</p>
+                      <span className="text-[11px] uppercase text-text-dim tracking-wide">IMO Number</span>
+                      <p className="font-mono text-sm mt-1">{selectedVessel.imo}</p>
+                    </div>
+                    <div>
+                      <span className="text-[11px] uppercase text-text-dim tracking-wide">Flag State</span>
+                      <p className="text-sm mt-1">{selectedVessel.flag}</p>
+                    </div>
+                    <div>
+                      <span className="text-[11px] uppercase text-text-dim tracking-wide">Vessel Type</span>
+                      <p className="text-sm mt-1">{selectedVessel.type}</p>
+                    </div>
+                    <div>
+                      <span className="text-[11px] uppercase text-text-dim tracking-wide">Position</span>
+                      <p className="font-mono text-sm mt-1">{selectedVessel.lat}°N, {selectedVessel.lon}°E</p>
                     </div>
 
-                    <div>
-                      <span className="text-[11px] uppercase tracking-wide text-text-dim">Flag State</span>
-                      <p className="text-text text-sm mt-1">{selectedVessel.flag}</p>
-                    </div>
-
-                    <div>
-                      <span className="text-[11px] uppercase tracking-wide text-text-dim">Vessel Type</span>
-                      <p className="text-text text-sm mt-1">{selectedVessel.type}</p>
-                    </div>
-
-                    <div>
-                      <span className="text-[11px] uppercase tracking-wide text-text-dim">Position</span>
-                      <p className="text-text font-mono text-sm mt-1">
-                        {selectedVessel.lat}°N, {selectedVessel.lon}°E
-                      </p>
-                    </div>
-                    {/* add for search directions to */}
-                    <div className="pt-2">
-                      {/* Label is just text-dim to match the other labels */}
-                      <span className="text-[11px] uppercase tracking-wide text-text-dim">Find route</span>
-
-                      <div className="relative mt-2">
-                        {/* The Input field, styled like a search bar, dark theme */}
+                    {/* Search / Route Origin */}
+                    <div className="pt-2 relative">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-[11px] uppercase text-text-dim tracking-wide">Find route from</span>
+                        {distance && <span className="text-[11px] font-mono text-accent animate-pulse">{distance} NM</span>}
+                      </div>
+                      <div className="relative">
                         <input
                           type="text"
-                          placeholder="Enter destination port or coordinates..."
-                          className="w-full h-11 pl-5 pr-12 text-sm bg-bg border border-border rounded-full text-text placeholder:text-text-dim focus:ring-1 focus:ring-accent focus:border-accent transition-all duration-200"
+                          value={inputValue}
+                          onChange={(e) => { setInputValue(e.target.value); setShowDropdown(true); }}
+                          onFocus={() => setShowDropdown(true)}
+                          placeholder="Search origin port..."
+                          className="w-full h-11 pl-5 pr-12 text-sm bg-bg border border-border rounded-full text-text placeholder:text-text-dim focus:ring-1 focus:ring-accent outline-none"
                         />
-
-                        {/* The Search/Direction icon, positioned inside the right of the bar */}
-                        <button className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 flex items-center justify-center rounded-full text-accent hover:bg-white/[0.04]">
-                          {/* This is a simple SVG for a Search icon, matching your CSS theme */}
-                          <svg 
-                            viewBox="0 0 24 24" 
-                            className="h-5 w-5" 
-                            fill="none" 
-                            stroke="currentColor" 
-                            strokeWidth="2.5"
-                          >
-                            <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                          </svg>
-                        </button>
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
+                          {inputValue ? (
+                            <button onClick={() => { setInputValue(""); setStartPoint(null); setShowDropdown(false); }} className="p-2 text-text-dim hover:text-text">&times;</button>
+                          ) : (
+                            <div className="p-2 text-accent">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                            </div>
+                          )}
+                        </div>
                       </div>
+
+                      {showDropdown && (
+                        <div className="absolute left-0 right-0 mt-2 bg-surface border border-border rounded-xl shadow-2xl z-[1002] overflow-hidden max-h-48 overflow-y-auto">
+                          {userGPS && (
+                            <button 
+                              className="w-full px-4 py-3 text-left text-sm hover:bg-white/5 flex items-center gap-3 border-b border-border text-accent"
+                              onClick={() => { setStartPoint(userGPS); setInputValue("Your Location"); setShowDropdown(false); }}
+                            >
+                              ⊕ Use current location
+                            </button>
+                          )}
+                          {PORT_SUGGESTIONS.filter(p => p.name.toLowerCase().includes(inputValue.toLowerCase())).map(port => (
+                            <button 
+                              key={port.name}
+                              className="w-full px-4 py-3 text-left text-sm hover:bg-white/5 flex flex-col border-b border-border/30 last:border-0"
+                              onClick={() => { setStartPoint(port); setInputValue(port.name); setShowDropdown(false); }}
+                            >
+                              <span className="font-medium">{port.name}</span>
+                              <span className="text-[10px] text-text-dim font-mono">{port.lat}, {port.lon}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    {/*  */}
                   </div>
                 </div>
               )}
@@ -154,6 +200,7 @@ function App() {
           </div>
         </section>
 
+        {/* Flagged Vessels Table - Integrated with Scrolling and Lat/Lon */}
         <section className="px-10 pb-8 flex flex-col min-h-0 flex-1">
           <h2 className="text-[15px] font-semibold text-text mb-3 shrink-0">Flagged Vessels</h2>
           <div className="overflow-y-auto max-h-[300px] border border-border rounded-lg">
