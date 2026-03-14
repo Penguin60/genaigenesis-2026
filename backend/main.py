@@ -1,8 +1,13 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
+from fastapi.middleware.cors import CORSMiddleware
+import os
+import pandas as pd
+import time
+import torch
 
 load_dotenv()
 
@@ -11,6 +16,8 @@ from agents.orchestrator import query_agent
 from agents.info_agents import run_info_agents
 from agents.chat_agent import run_chat
 from ingestion.vessel_checks import check_retirement, get_ship_age
+from models.trajectory_vae import calculate_reconstruction_error
+from scoring.gap_check import analyze_ais_reporting_gaps
 
 app = FastAPI(
     title="Shadow Fleet Detection API",
@@ -21,24 +28,83 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.state.sim_start = None
+app.state.sim_speed = 300
+
 class VesselRequest(BaseModel):
     mmsi: str
-    imo: str = None
+    imo: Optional[str] = None
 
 class QueryRequest(BaseModel):
     query: str
+
 
 class ChatRequest(BaseModel):
     message: str
     context: Optional[str] = ""
 
+class AnalysisRequest(BaseModel):
+    trajectory: List[Dict[str, Any]]
+    ship_type: str = "tanker"
+
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to the Shadow Fleet Detection API"}
+    return {"message": "Shadow Fleet Detection API"}
+
+@app.post("/api/v1/simulation/start")
+def start_simulation():
+    app.state.sim_start = time.time()
+    return {"message": "Simulation started", "start_time": app.state.sim_start}
+
+@app.get("/api/v1/simulation")
+def simulation():
+    if app.state.sim_start is None:
+        raise HTTPException(status_code=400, detail="Simulation not started")
+
+    data_path = os.path.join(os.path.dirname(__file__), "data", "test", "hackathon_test_data.csv")
+    if not os.path.exists(data_path):
+        raise HTTPException(status_code=404, detail="Hackathon data not found.")
+
+    df = pd.read_csv(data_path)
+    df = df[~df['TYPE'].str.lower().isin(['fishing', 'passenger'])]
+    df = df[df['CRAFT_ID'] != 'END']
+    df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'])
+    
+    csv_start_time = df['TIMESTAMP'].min()
+    real_elapsed = time.time() - app.state.sim_start
+    sim_elapsed_seconds = real_elapsed * app.state.sim_speed
+    current_sim_time = csv_start_time + pd.Timedelta(seconds=sim_elapsed_seconds)
+
+    df_visible = df[df['TIMESTAMP'] <= current_sim_time]
+    
+    vessels = {}
+    for mmsi, group in df_visible.groupby('MMSI'):
+        group_sorted = group.sort_values('TIMESTAMP')
+        pings = group_sorted.to_dict('records')
+        
+        ship_type = pings[0]['TYPE'].lower()
+        score = calculate_reconstruction_error(pings, ship_type=ship_type)
+        
+        vessels[mmsi] = {
+            "name": f"VESSEL_{mmsi}",
+            "mmsi": str(mmsi),
+            "imo": f"900{mmsi}" if mmsi < 10000000 else str(mmsi),
+            "type": pings[0]['TYPE'],
+            "status": "Anomaly Detected" if score > 0.1 else "Compliant",
+            "score": round(score, 4),
+            "track": [{"ts": p['TIMESTAMP'].isoformat(), "lat": p['LAT'], "lon": p['LON'], "course": p['COURSE'], "speed": p['SPEED']} for p in pings]
+        }
+
+    return {
+        "current_sim_time": current_sim_time.isoformat(),
+        "vessels": list(vessels.values())
+    }
 
 @app.post("/api/v1/analyze-vessel")
 def analyze_vessel(request: VesselRequest) -> Dict[str, Any]:
@@ -78,6 +144,35 @@ def chat(request: ChatRequest) -> Dict[str, Any]:
     try:
         response = run_chat(request.message, request.context or "")
         return {"response": response}
+
+@app.post("/analysis")
+def run_analysis(request: AnalysisRequest) -> Dict[str, Any]:
+    """
+    Runs the heavier analysis pipeline over a trajectory using the trained ship-type VAE.
+    Returns a normalized movement anomaly score in [0, 1].
+    """
+    try:
+        if not request.trajectory:
+            raise HTTPException(status_code=400, detail="trajectory must contain at least one point")
+
+        ship_type = request.ship_type.lower().strip()
+        score = calculate_reconstruction_error(request.trajectory, ship_type=ship_type)
+        gap_check = analyze_ais_reporting_gaps(request.trajectory)
+        movement_alert = score > 0.05
+        gap_alert = bool(gap_check.get("suspicious", False))
+
+        return {
+            "ship_type": ship_type,
+            "trajectory_points": len(request.trajectory),
+            "movement_anomaly_score": round(score, 4),
+            "movement_alert": movement_alert,
+            "gap_check": gap_check,
+            "alert": movement_alert or gap_alert,
+        }
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -34,7 +34,7 @@ def run_hackathon_demo():
     for _, row in df.iterrows():
         is_end = str(row.get('CRAFT_ID', '')).upper() == 'END' or str(row.get('Track_ID', '')).upper() == 'NA'
         if is_end:
-            if current_seq and len(current_seq) >= 10:
+            if current_seq and len(current_seq) >= 5:
                 sequences.append(current_seq)
             current_seq = []
             current_track_id = None
@@ -42,7 +42,7 @@ def run_hackathon_demo():
             
         track_id = row['Track_ID']
         if track_id != current_track_id:
-            if current_seq and len(current_seq) >= 10:
+            if current_seq and len(current_seq) >= 5:
                 sequences.append(current_seq)
             current_seq = []
             current_track_id = track_id
