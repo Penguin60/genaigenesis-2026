@@ -9,46 +9,60 @@ const MOCK_VESSELS = [
   { name: "ZENITH FORTUNE", imo: "9534209", flag: "PA", type: "Bulk Carrier", status: "Rendezvous", lat: "34.55", lon: "-119.78" },
 ];
 
+const BADGE_STYLES = {
+  "ais-gap": "bg-badge-red-bg text-badge-red",
+  "flag-change": "bg-badge-amber-bg text-badge-amber",
+  "rendezvous": "bg-badge-purple-bg text-badge-purple",
+  "route-deviation": "bg-badge-blue-bg text-badge-blue",
+};
+
 function App() {
   return (
-    <div className="app">
-      <header className="topbar">
-        <span className="logo">VANGUARD</span>
-        <span className="subtitle">Shadow Fleet Monitor</span>
+    <div className="flex flex-col min-h-screen">
+      <header className="flex items-center gap-3.5 px-6 h-14 bg-surface border-b border-border">
+        <span className="font-bold text-xl tracking-[3px] text-accent">VANGUARD</span>
+        <span className="text-sm text-text-dim">Shadow Fleet Monitor</span>
       </header>
 
-      <main className="content">
-        <section className="map-section">
-          <div className="map-placeholder">Map View</div>
+      <main className="flex-1 flex flex-col overflow-y-auto">
+        <section className="px-10 py-6">
+          <div className="w-full h-[480px] bg-surface border border-border rounded-lg flex items-center justify-center text-text-dim text-sm">
+            Map View
+          </div>
         </section>
 
-        <section className="table-section">
-          <h2>Flagged Vessels</h2>
-          <div className="table-wrap">
-            <table>
+        <section className="px-10 pb-8">
+          <h2 className="text-[15px] font-semibold text-text mb-3">Flagged Vessels</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-[13px]">
               <thead>
                 <tr>
-                  <th>Vessel</th>
-                  <th>IMO</th>
-                  <th>Flag</th>
-                  <th>Type</th>
-                  <th>Status</th>
-                  <th>Lat</th>
-                  <th>Lon</th>
+                  {["Vessel", "IMO", "Flag", "Type", "Status", "Lat", "Lon"].map((h) => (
+                    <th key={h} className="text-left px-3 py-2 font-semibold text-[11px] uppercase tracking-wide text-text-dim border-b border-border">
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {MOCK_VESSELS.map((v) => (
-                  <tr key={v.imo}>
-                    <td>{v.name}</td>
-                    <td className="mono">{v.imo}</td>
-                    <td>{v.flag}</td>
-                    <td>{v.type}</td>
-                    <td><span className={`badge ${v.status.replace(/\s/g, "-").toLowerCase()}`}>{v.status}</span></td>
-                    <td className="mono">{v.lat}</td>
-                    <td className="mono">{v.lon}</td>
-                  </tr>
-                ))}
+                {MOCK_VESSELS.map((v) => {
+                  const badgeKey = v.status.replace(/\s/g, "-").toLowerCase();
+                  return (
+                    <tr key={v.imo} className="hover:bg-white/[0.02]">
+                      <td className="px-3 py-2.5 border-b border-border whitespace-nowrap">{v.name}</td>
+                      <td className="px-3 py-2.5 border-b border-border whitespace-nowrap font-mono text-xs">{v.imo}</td>
+                      <td className="px-3 py-2.5 border-b border-border whitespace-nowrap">{v.flag}</td>
+                      <td className="px-3 py-2.5 border-b border-border whitespace-nowrap">{v.type}</td>
+                      <td className="px-3 py-2.5 border-b border-border whitespace-nowrap">
+                        <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${BADGE_STYLES[badgeKey] || ""}`}>
+                          {v.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 border-b border-border whitespace-nowrap font-mono text-xs">{v.lat}</td>
+                      <td className="px-3 py-2.5 border-b border-border whitespace-nowrap font-mono text-xs">{v.lon}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
