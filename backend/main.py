@@ -4,6 +4,8 @@ from typing import Dict, Any
 
 from scoring.risk_calculator import calculate_sri
 from agents.orchestrator import query_agent
+from agents.info_agents import run_info_agents
+from ingestion.vessel_checks import check_retirement, get_ship_age
 
 app = FastAPI(
     title="Shadow Fleet Detection API",
@@ -44,6 +46,33 @@ def ask_agent(request: QueryRequest) -> Dict[str, Any]:
     try:
         response = query_agent(request.query)
         return {"response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/info")
+def vessel_info(request: VesselRequest) -> Dict[str, Any]:
+    """
+    Aggregated vessel intelligence endpoint.
+    Queries retirement status, ship age, and runs three parallel AI agent
+    checks (insurer, registration country, shell company detection) via LangGraph.
+    """
+    try:
+        # Direct checks (no agent needed)
+        retirement = check_retirement(imo=request.imo, mmsi=request.mmsi)
+        age = get_ship_age(imo=request.imo, mmsi=request.mmsi)
+
+        # Parallel agent checks via LangGraph fan-out/fan-in
+        agent_results = run_info_agents(imo=request.imo, mmsi=request.mmsi)
+
+        return {
+            "mmsi": request.mmsi,
+            "imo": request.imo,
+            "retirement": retirement,
+            "age": age,
+            "insurer": agent_results.get("insurer", {}),
+            "registration": agent_results.get("registration", {}),
+            "ownership": agent_results.get("ownership", {}),
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
