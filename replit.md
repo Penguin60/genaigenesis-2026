@@ -1,4 +1,4 @@
-# VANGUARD - Shadow Fleet Monitor
+# Popeye - Shadow Fleet Monitor
 
 A maritime intelligence web application for detecting and monitoring shadow fleet vessels. Built for the Maritime Navigator Hackathon.
 

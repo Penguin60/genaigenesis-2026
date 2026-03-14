@@ -11,7 +11,7 @@ load_dotenv(dotenv_path=env_path)
 WATSONX_API_KEY = os.getenv("WATSONX_API_KEY")
 WATSONX_PROJECT_ID = os.getenv("WATSONX_PROJECT_ID")
 
-SYSTEM_PROMPT = """You are VANGUARD Advisor, an AI maritime safety assistant integrated into the VANGUARD Shadow Fleet Monitor. Your role is to help operators navigate safely by advising them based on real-time threat intelligence from the system.
+SYSTEM_PROMPT = """You are Popeye Advisor, an AI maritime safety assistant integrated into the Popeye Shadow Fleet Monitor. Your role is to help operators navigate safely by advising them based on real-time threat intelligence from the system.
 
 You will be given a snapshot of the current threat picture, including flagged vessel positions, statuses, and identified danger zones. Use this data to give concise, actionable navigation advice.
 
@@ -42,7 +42,7 @@ async def generate_advisory(user_input: str) -> str:
         f"--- Current Threat Intelligence ---\n{context}\n"
         f"--- End of Intelligence ---\n\n"
         f"Operator: {message}\n"
-        f"VANGUARD Advisor:"
+        f"Popeye Advisor:"
     )
 
     try:
@@ -53,7 +53,7 @@ async def generate_advisory(user_input: str) -> str:
         return f"Advisory unavailable: {e}"
 
 
-chat_flow = rt.Flow("VANGUARD Chat Advisor", entry_point=generate_advisory)
+chat_flow = rt.Flow("Popeye Chat Advisor", entry_point=generate_advisory)
 
 
 def run_chat(message: str, context: str) -> str:

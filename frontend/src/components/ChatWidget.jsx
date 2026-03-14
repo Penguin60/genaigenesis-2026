@@ -27,7 +27,7 @@ function buildContext(vessels, heatmapPoints) {
 
 const WELCOME = {
   role: "assistant",
-  text: "VANGUARD Advisor online. I have real-time threat intelligence from this sector. Ask me about safe routes, flagged vessels, or danger zones.",
+  text: "Popeye Advisor online. I have real-time threat intelligence from this sector. Ask me about safe routes, flagged vessels, or danger zones.",
 };
 
 export default function ChatWidget({ vessels = [], heatmapPoints = [] }) {
@@ -87,7 +87,7 @@ export default function ChatWidget({ vessels = [], heatmapPoints = [] }) {
             <div className="chat-header-left">
               <div className="chat-status-dot" />
               <div className="chat-header-title">
-                <strong>VANGUARD</strong>
+                <strong>Popeye</strong>
                 <span>Navigation Advisor</span>
               </div>
             </div>
@@ -131,7 +131,7 @@ export default function ChatWidget({ vessels = [], heatmapPoints = [] }) {
         </div>
       )}
 
-      <button className="chat-toggle-btn" onClick={() => setOpen(o => !o)} title="VANGUARD Advisor">
+      <button className="chat-toggle-btn" onClick={() => setOpen(o => !o)} title="Popeye Advisor">
         {open ? (
           <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20" style={{ color: "#fff" }}>
             <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />

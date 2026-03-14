@@ -636,10 +636,9 @@ function App() {
   return (
     <div className="flex flex-col min-h-screen bg-bg text-text">
       <header className="flex items-center gap-3.5 px-6 py-8 h-14 bg-surface border-b border-border">
-        <span className="font-bold text-4xl tracking-[3px] text-accent">
-          VANGUARD
+        <span className="font-bold text-2xl tracking-[1px] text-accent">
+          POPEYE
         </span>
-        <span className="text-xl text-text-dim">Shadow Fleet Monitor</span>
       </header>
 
       <main className="flex-1 flex flex-col overflow-hidden">

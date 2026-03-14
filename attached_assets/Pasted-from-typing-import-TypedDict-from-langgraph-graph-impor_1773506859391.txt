@@ -3,7 +3,7 @@ from langgraph.graph import StateGraph, START, END
 from agents.watson_client import get_watsonx_model
 
 
-SYSTEM_PROMPT = """You are VANGUARD Advisor, an AI maritime safety assistant integrated into the VANGUARD Shadow Fleet Monitor. Your role is to help operators navigate safely by advising them based on real-time threat intelligence from the system.
+SYSTEM_PROMPT = """You are Popeye Advisor, an AI maritime safety assistant integrated into the Popeye Shadow Fleet Monitor. Your role is to help operators navigate safely by advising them based on real-time threat intelligence from the system.
 
 You will be given a snapshot of the current threat picture, including flagged vessel positions, statuses, and identified danger zones. Use this data to give concise, actionable navigation advice.
 
@@ -30,7 +30,7 @@ def generate_advisory(state: ChatState) -> ChatState:
         f"--- Current Threat Intelligence ---\n{state['context']}\n"
         f"--- End of Intelligence ---\n\n"
         f"Operator: {state['message']}\n"
-        f"VANGUARD Advisor:"
+        f"Popeye Advisor:"
     )
 
     try:
