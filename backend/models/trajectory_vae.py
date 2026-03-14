@@ -103,14 +103,15 @@ class TrajectoryDataset(Dataset):
         course_rad = raw['COURSE'] * (3.141592653589793 / 180.0)
 
         # --- Normalize all features ---
-        # v_LON/v_LAT: Max expected change is ~0.25 deg/hour (at 15 knots) -> / 0.25
         # Derived Speed (Calculated from position)
-        v_mag = np.sqrt(v_lon.values**2 + v_lat.values**2) # In degrees/hour
-        v_mag_knots = v_mag * 60.0 # Rough conversion to knots
-        
-        # Mismatch Feature: (Reported Speed - Derived Speed)
-        # This is the "Smoking Gun" for shadow vessels
+        v_mag = np.sqrt(v_lon.values**2 + v_lat.values**2)
+        v_mag_knots = v_mag * 60.0
         speed_mismatch = (raw['SPEED'].values - v_mag_knots)
+        
+        # Heading Conflict (Angle between Course and Velocity Vector)
+        true_bearing = np.degrees(np.arctan2(v_lon.values, v_lat.values)) % 360
+        angle_diff = np.abs(raw['COURSE'].values - true_bearing)
+        heading_conflict = np.minimum(angle_diff, 360 - angle_diff)
         
         features = np.stack([
             v_lon.values / 0.25,
@@ -118,15 +119,16 @@ class TrajectoryDataset(Dataset):
             np.sin(course_rad.values),
             np.cos(course_rad.values),
             raw['SPEED'].values / MAX_SPEED_KNOTS,
-            speed_mismatch / 10.0, # Target feature for capture
-        ], axis=1)  # shape: (seq_len, 6)
+            speed_mismatch / 10.0,
+            heading_conflict / 180.0,
+        ], axis=1)  # shape: (seq_len, 7)
         
         # Pad or truncate to max_seq_len
         if len(features) > self.max_seq_len:
             features = features[:self.max_seq_len]
             return torch.tensor(features, dtype=torch.float32)
         else:
-            padding = torch.zeros(self.max_seq_len - len(features), 6)
+            padding = torch.zeros(self.max_seq_len - len(features), 7)
             features = torch.cat([torch.tensor(features, dtype=torch.float32), padding])
             
         return features
@@ -142,7 +144,7 @@ class TransformerVAE(_NNBase):
     Stub for the Transformer-VAE (Variational Autoencoder) implemented in PyTorch.
     Trained on 'Normal' tanker routes to detect Movement Fraud.
     """
-    def __init__(self, input_dim=6, latent_dim=16, seq_len=50, hidden_dim=64):
+    def __init__(self, input_dim=7, latent_dim=16, seq_len=50, hidden_dim=64):
         super(TransformerVAE, self).__init__()
         self.latent_dim = latent_dim
         self.seq_len = seq_len
@@ -243,10 +245,14 @@ def calculate_reconstruction_error(trajectory: List[Dict[str, float]], ship_type
     """
     Evaluates movement (speed/heading). Spiking reconstruction error indicates spoofing.
     """
+<<<<<<< HEAD
     if not TORCH_AVAILABLE:
         return 0.0
+=======
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+>>>>>>> 4ce301ab57313891530243193a76ba1a0c58c78b
     # 1. Prepare the trajectory data into a Tensor matching the VAE input shape
-    # We need a shape of (1, max_seq_len, 4) for (batch_size, seq_len, features)
+    # We need a shape of (1, max_seq_len, 7) for (batch_size, seq_len, features)
     max_seq_len = 50
     df_seq = pd.DataFrame(trajectory)
     
@@ -281,6 +287,16 @@ def calculate_reconstruction_error(trajectory: List[Dict[str, float]], ship_type
     v_mag_knots = v_mag * 60.0
     speed_mismatch = (raw['SPEED'].values - v_mag_knots)
     
+    # Calculate Heading Conflict (Angle between Course and Velocity Vector)
+    # Only meaningful if moving (speed > 3 knots)
+    true_bearing = np.degrees(np.arctan2(v_lon.values, v_lat.values)) % 360
+    angle_diff = np.abs(raw['COURSE'].values - true_bearing)
+    heading_conflict = np.minimum(angle_diff, 360 - angle_diff)
+    
+    # 2. Zigzag Guard: If moving > 3 knots and heading mismatch is extreme (>100 deg)
+    if (raw['SPEED'] > 3.0).any() and (heading_conflict > 100).any():
+        return 1.0 # Instant alert
+    
     # Apply same normalization as training
     features = np.stack([
         v_lon.values / 0.25,
@@ -288,25 +304,26 @@ def calculate_reconstruction_error(trajectory: List[Dict[str, float]], ship_type
         np.sin(course_rad.values),
         np.cos(course_rad.values),
         raw['SPEED'].values / MAX_SPEED_KNOTS,
-        speed_mismatch / 10.0, # Explicit Conflict feature
-    ], axis=1)  # shape: (seq_len, 6)
+        speed_mismatch / 10.0,
+        heading_conflict / 180.0,
+    ], axis=1)  # shape: (seq_len, 7)
     
-    # Pad to max_seq_len
+    # Pad to max_seq_len (7 features)
     if len(features) > max_seq_len:
         features = torch.tensor(features[:max_seq_len], dtype=torch.float32)
     else:
-        padding = torch.zeros(max_seq_len - len(features), 6)
+        padding = torch.zeros(max_seq_len - len(features), 7)
         features = torch.cat([torch.tensor(features, dtype=torch.float32), padding])
         
     # Add batch dimension
-    features_tensor = features.unsqueeze(0).to(torch.float32)
+    features_tensor = features.unsqueeze(0).to(torch.float32).to(device)
     
     # 2. Load the pre-trained VAE model for the given ship type
     models_dir = os.path.dirname(os.path.abspath(__file__))
     model_path = os.path.join(models_dir, f'vae_{ship_type}.pth')
-    model = TransformerVAE(input_dim=6, seq_len=max_seq_len)
+    model = TransformerVAE(input_dim=7, seq_len=max_seq_len).to(device)
     try:
-        model.load_state_dict(torch.load(model_path, weights_only=True))
+        model.load_state_dict(torch.load(model_path, weights_only=True, map_location=device))
         model.eval()
     except FileNotFoundError:
         print(f"Warning: {model_path} not found. Train the model first with train_all.py.")
@@ -315,13 +332,17 @@ def calculate_reconstruction_error(trajectory: List[Dict[str, float]], ship_type
     with torch.no_grad():
         recon_batch, _, _ = model(features_tensor)
         
-        # We only want basic Mean Squared Error for the anomaly score
-        # CRITICAL: We skip the first 2 frames so the "0 velocity start" doesn't ruin legitimate scores
         actual_len = min(len(df_seq), max_seq_len)
         if actual_len > 2:
-            # Calculate MSE per timestep: (seq_len, feature_dim) -> (seq_len,)
-            per_ping_mse = torch.mean((recon_batch[0, 2:actual_len, :] - features_tensor[0, 2:actual_len, :])**2, dim=1)
-            # Use max to catch localized anomalies (like a single teleport jump)
+            # Calculate squared error per feature: (max_seq_len, 7)
+            diff_sq = (recon_batch[0, 2:actual_len, :] - features_tensor[0, 2:actual_len, :])**2
+            
+            # --- WEIGHTED MSE (7 Features) ---
+            # [0:vLon, 1:vLat, 2:sinC, 3:cosC, 4:Speed, 5:SpeedMismatch, 6:HeadingConflict]
+            weights = torch.tensor([1.0, 1.0, 1.0, 1.0, 1.0, 5.0, 5.0], device=device)
+            weighted_diff = diff_sq * weights
+            
+            per_ping_mse = torch.mean(weighted_diff, dim=1)
             mse_error = torch.max(per_ping_mse).item()
         else:
             mse_error = 0.0
