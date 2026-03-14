@@ -98,15 +98,11 @@ class TrajectoryDataset(Dataset):
     def __getitem__(self, idx):
         return self.sequences[idx]
 
-<<<<<<< HEAD
 class TransformerVAE(_NNBase):
     """
     Stub for the Transformer-VAE (Variational Autoencoder) implemented in PyTorch.
     Trained on 'Normal' tanker routes to detect Movement Fraud.
     """
-=======
-class TransformerVAE(nn.Module):
->>>>>>> ff50ac4bda10603b49cbe77ecf773189c8718a7e
     def __init__(self, input_dim=7, latent_dim=16, seq_len=50, hidden_dim=64):
         super(TransformerVAE, self).__init__()
         self.latent_dim = latent_dim
@@ -171,14 +167,6 @@ def train_vae(csv_file: str, epochs: int = 10, batch_size: int = 16, learning_ra
     return model
 
 def calculate_reconstruction_error(trajectory: List[Dict[str, float]], ship_type: str = 'tanker') -> float:
-<<<<<<< HEAD
-    """
-    Evaluates movement (speed/heading). Spiking reconstruction error indicates spoofing.
-    """
-    if not TORCH_AVAILABLE:
-        return 0.0
-=======
->>>>>>> ff50ac4bda10603b49cbe77ecf773189c8718a7e
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     max_seq_len = 50
     df_seq = pd.DataFrame(trajectory)
