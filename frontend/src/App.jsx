@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, CircleMarker, Polyline, useMap } from "react-l
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import "leaflet.heat";
+import ChatWidget from "./components/ChatWidget";
 
 const BASE_VESSELS = [
   // BAD VESSELS
@@ -472,6 +473,8 @@ function App() {
           </div>
         </section>
       </main>
+
+      <ChatWidget vessels={vesselsAtTime} heatmapPoints={heatmapPoints} />
     </div>
   );
 }

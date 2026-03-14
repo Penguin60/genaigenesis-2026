@@ -1,0 +1,61 @@
+from typing import TypedDict
+from langgraph.graph import StateGraph, START, END
+from agents.watson_client import get_watsonx_model
+
+
+SYSTEM_PROMPT = """You are VANGUARD Advisor, an AI maritime safety assistant integrated into the VANGUARD Shadow Fleet Monitor. Your role is to help operators navigate safely by advising them based on real-time threat intelligence from the system.
+
+You will be given a snapshot of the current threat picture, including flagged vessel positions, statuses, and identified danger zones. Use this data to give concise, actionable navigation advice.
+
+Rules:
+- Be direct and concise (3-5 sentences max)
+- Reference specific vessel names, statuses, or coordinates when relevant
+- Always recommend avoiding areas with AIS Gap, Dark Activity, Rendezvous, or Flag Hopping vessels
+- Use nautical terminology appropriately
+- If the user asks a general question not related to navigation, still answer helpfully but briefly
+"""
+
+
+class ChatState(TypedDict):
+    message: str
+    context: str
+    response: str
+
+
+def generate_advisory(state: ChatState) -> ChatState:
+    model = get_watsonx_model()
+
+    prompt = (
+        f"{SYSTEM_PROMPT}\n\n"
+        f"--- Current Threat Intelligence ---\n{state['context']}\n"
+        f"--- End of Intelligence ---\n\n"
+        f"Operator: {state['message']}\n"
+        f"VANGUARD Advisor:"
+    )
+
+    try:
+        response = model.generate_text(prompt=prompt)
+        text = response if isinstance(response, str) else str(response)
+    except Exception as e:
+        text = f"Advisory unavailable: {e}"
+
+    return {"response": text.strip()}
+
+
+def build_chat_graph():
+    graph = StateGraph(ChatState)
+    graph.add_node("generate_advisory", generate_advisory)
+    graph.add_edge(START, "generate_advisory")
+    graph.add_edge("generate_advisory", END)
+    return graph.compile()
+
+
+chat_app = build_chat_graph()
+
+
+def run_chat(message: str, context: str) -> str:
+    try:
+        output = chat_app.invoke({"message": message, "context": context, "response": ""})
+        return output.get("response", "No advisory generated.")
+    except Exception as e:
+        return f"Advisory system error: {str(e)}"

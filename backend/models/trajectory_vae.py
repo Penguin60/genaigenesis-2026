@@ -1,10 +1,17 @@
-import torch
-import torch.nn as nn
 from typing import Dict, Any, List, Union
 import os
-
 import pandas as pd
-from torch.utils.data import Dataset, DataLoader
+
+try:
+    import torch
+    import torch.nn as nn
+    from torch.utils.data import Dataset, DataLoader
+    TORCH_AVAILABLE = True
+    _NNBase = nn.Module
+except ImportError:
+    TORCH_AVAILABLE = False
+    Dataset = object
+    _NNBase = object
 
 class TrajectoryDataset(Dataset):
     """Dataset to parse Trajectories by Track_ID and END row terminators.
@@ -130,7 +137,7 @@ class TrajectoryDataset(Dataset):
     def __getitem__(self, idx):
         return self.sequences[idx]
 
-class TransformerVAE(nn.Module):
+class TransformerVAE(_NNBase):
     """
     Stub for the Transformer-VAE (Variational Autoencoder) implemented in PyTorch.
     Trained on 'Normal' tanker routes to detect Movement Fraud.
@@ -236,6 +243,8 @@ def calculate_reconstruction_error(trajectory: List[Dict[str, float]], ship_type
     """
     Evaluates movement (speed/heading). Spiking reconstruction error indicates spoofing.
     """
+    if not TORCH_AVAILABLE:
+        return 0.0
     # 1. Prepare the trajectory data into a Tensor matching the VAE input shape
     # We need a shape of (1, max_seq_len, 4) for (batch_size, seq_len, features)
     max_seq_len = 50
