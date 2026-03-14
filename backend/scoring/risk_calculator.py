@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from ingestion.ais_stream import fetch_live_ais_data, fetch_ocean_currents
 from ingestion.vessel_registry import fetch_registry_data
@@ -7,7 +7,7 @@ from ingestion.watsonx_data import query_knowledge_lakehouse
 from models.trajectory_vae import calculate_reconstruction_error
 from models.dark_agent import analyze_dark_period
 
-def calculate_sri(mmsi: str, imo: str = None) -> Dict[str, Any]:
+def calculate_sri(mmsi: str, imo: Optional[str] = None) -> Dict[str, Any]:
     """
     Computes the final Shadow-Risk Index (SRI) using:
     SRI = (W1 * MovementAnomaly) + (W2 * DarkLoitering) + (W3 * IdentityRisk) + (W4 * OwnershipRisk)
