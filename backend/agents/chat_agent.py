@@ -1,7 +1,9 @@
-from typing import TypedDict
-from langgraph.graph import StateGraph, START, END
+import json
+import railtracks as rt
+from dotenv import load_dotenv
 from agents.watson_client import get_watsonx_model
 
+load_dotenv()
 
 SYSTEM_PROMPT = """You are VANGUARD Advisor, an AI maritime safety assistant integrated into the VANGUARD Shadow Fleet Monitor. Your role is to help operators navigate safely by advising them based on real-time threat intelligence from the system.
 
@@ -16,46 +18,46 @@ Rules:
 """
 
 
-class ChatState(TypedDict):
-    message: str
-    context: str
-    response: str
+@rt.function_node
+async def generate_advisory(user_input: str) -> str:
+    """
+    Railtracks function node that calls the watsonx model to produce
+    a maritime navigation advisory based on the operator's message
+    and current threat-intelligence context.
 
-
-def generate_advisory(state: ChatState) -> ChatState:
-    model = get_watsonx_model()
+    user_input: JSON string with keys 'message' and 'context'.
+    """
+    data = json.loads(user_input)
+    message = data.get("message", "")
+    context = data.get("context", "No threat data available.")
 
     prompt = (
         f"{SYSTEM_PROMPT}\n\n"
-        f"--- Current Threat Intelligence ---\n{state['context']}\n"
+        f"--- Current Threat Intelligence ---\n{context}\n"
         f"--- End of Intelligence ---\n\n"
-        f"Operator: {state['message']}\n"
+        f"Operator: {message}\n"
         f"VANGUARD Advisor:"
     )
 
     try:
+        model = get_watsonx_model()
         response = model.generate_text(prompt=prompt)
-        text = response if isinstance(response, str) else str(response)
+        return response.strip() if isinstance(response, str) else str(response).strip()
     except Exception as e:
-        text = f"Advisory unavailable: {e}"
-
-    return {"response": text.strip()}
+        return f"Advisory unavailable: {e}"
 
 
-def build_chat_graph():
-    graph = StateGraph(ChatState)
-    graph.add_node("generate_advisory", generate_advisory)
-    graph.add_edge(START, "generate_advisory")
-    graph.add_edge("generate_advisory", END)
-    return graph.compile()
-
-
-chat_app = build_chat_graph()
+chat_flow = rt.Flow("VANGUARD Chat Advisor", entry_point=generate_advisory)
 
 
 def run_chat(message: str, context: str) -> str:
+    """
+    Public entry point called by the FastAPI /api/v1/chat endpoint.
+    Runs the Railtracks flow and returns the advisory text.
+    """
     try:
-        output = chat_app.invoke({"message": message, "context": context, "response": ""})
-        return output.get("response", "No advisory generated.")
+        payload = json.dumps({"message": message, "context": context})
+        result = chat_flow.invoke(payload)
+        return result if isinstance(result, str) else str(result)
     except Exception as e:
         return f"Advisory system error: {str(e)}"
