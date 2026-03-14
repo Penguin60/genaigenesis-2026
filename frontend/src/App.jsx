@@ -1,6 +1,8 @@
                     import { useEffect, useMemo, useState } from "react";
-                    import { MapContainer, TileLayer, CircleMarker, Polyline } from "react-leaflet";
+                    import { MapContainer, TileLayer, CircleMarker, Polyline, useMap } from "react-leaflet";
                     import "leaflet/dist/leaflet.css";
+                    import L from "leaflet";
+                    import "leaflet.heat";
 
                     const BASE_VESSELS = [
                       // BAD VESSELS
@@ -31,12 +33,18 @@
 
                     function seedFromId(id) { return id.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0); }
 
+                    // Override directions: make BLACK MARLIN head toward CASPIAN WAVE (southeast)
+                    const DIRECTION_OVERRIDES = {
+                      "9612045": { lat: -1, lon: 1 }, // BLACK MARLIN → southeast toward CASPIAN WAVE
+                    };
+
                     function generateTrack(vessel) {
                       const seed = seedFromId(vessel.imo);
                       const baseLat = Number.parseFloat(vessel.lat);
                       const baseLon = Number.parseFloat(vessel.lon);
-                      const latDirection = seed % 2 === 0 ? 1 : -1;
-                      const lonDirection = seed % 3 === 0 ? -1 : 1;
+                      const override = DIRECTION_OVERRIDES[vessel.imo];
+                      const latDirection = override ? override.lat : (seed % 2 === 0 ? 1 : -1);
+                      const lonDirection = override ? override.lon : (seed % 3 === 0 ? -1 : 1);
                       return TIMELINE_POINTS.map((ts, index) => {
                         const drift = index / TIMELINE_POINTS.length;
                         const latWave = Math.sin((index + seed) * 0.47) * 0.07;
@@ -76,6 +84,169 @@
                       "flag-hopping": "bg-[#7f1d1d]/30 text-[#dc2626]",
                     };
 
+                    // ── Heatmap: density-based danger zone engine ──────────
+                    const THREAT_WEIGHT = {
+                      "AIS Gap": 0.48, "Dark Activity": 0.48, "Rendezvous": 0.36,
+                      "Route Deviation": 0.3, "Flag Hopping": 0.24, "Compliant": 0.0,
+                    };
+                    const CELL = 0.055;
+                    const DANGER_RADIUS = 0.22;
+                    const GHOST_STEPS = 5;
+                    const GHOST_INTERVAL = 0.4;
+                    const GHOST_DECAY = 0.72;
+                    const HEADING_FAN = [-15, 0, 15];
+
+                    // Rough coastal polygons for land masking (point-in-polygon ray-cast)
+                    // UAE + Oman southern coast, Iran northern coast, Musandam peninsula
+                    const LAND_POLYGONS = [
+                      // UAE / Oman southern coastline (west to east)
+                      [
+                        [24.0, 51.5], [24.45, 54.35], [24.42, 54.50], [24.47, 54.65],
+                        [24.35, 54.75], [24.20, 54.80], [24.15, 55.15], [24.60, 55.40],
+                        [25.05, 55.10], [25.20, 55.20], [25.30, 55.30], [25.34, 55.40],
+                        [25.40, 55.52], [25.58, 56.20], [25.30, 56.35], [25.15, 56.38],
+                        [24.95, 56.60], [24.70, 56.65], [24.25, 56.55], [23.60, 58.55],
+                        [23.20, 58.80], [22.50, 59.80], [22.0, 59.80], [22.0, 51.5],
+                        [24.0, 51.5],
+                      ],
+                      // Iran northern coastline
+                      [
+                        [27.10, 51.5], [26.90, 52.50], [26.60, 53.80], [26.55, 54.30],
+                        [26.30, 54.80], [26.15, 55.60], [26.55, 56.10], [26.95, 56.20],
+                        [27.10, 56.60], [27.20, 56.85], [26.65, 57.30], [26.40, 57.10],
+                        [26.30, 56.90], [26.10, 56.60], [25.85, 56.70], [25.75, 57.30],
+                        [25.45, 57.50], [25.30, 58.80], [25.60, 59.00], [25.80, 59.80],
+                        [30.0, 59.80], [30.0, 51.5], [27.10, 51.5],
+                      ],
+                    ];
+
+                    function pointInPolygon(lat, lon, polygon) {
+                      let inside = false;
+                      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                        const [yi, xi] = polygon[i];
+                        const [yj, xj] = polygon[j];
+                        if (((yi > lat) !== (yj > lat)) && (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi)) {
+                          inside = !inside;
+                        }
+                      }
+                      return inside;
+                    }
+
+                    function isLand(lat, lon) {
+                      for (const poly of LAND_POLYGONS) {
+                        if (pointInPolygon(lat, lon, poly)) return true;
+                      }
+                      return false;
+                    }
+
+                    function generateHeatmapPoints(vessels) {
+                      // 1. Collect threat sources: real positions + ghost projections
+                      const sources = [];
+                      for (const v of vessels) {
+                        const tw = THREAT_WEIGHT[v.status] ?? 0;
+                        if (tw === 0) continue;
+                        const lat = v.point.lat;
+                        const lon = v.point.lon;
+                        sources.push({ lat, lon, w: tw });
+
+                        // Infer heading from track
+                        const track = v.track || [];
+                        let heading = 0;
+                        if (track.length >= 2) {
+                          const p1 = track[track.length - 2];
+                          const p2 = track[track.length - 1];
+                          heading = (Math.atan2(p2.lon - p1.lon, p2.lat - p1.lat) * 180 / Math.PI + 360) % 360;
+                        }
+                        const speed = 10;
+                        for (const offset of HEADING_FAN) {
+                          const rad = (heading + offset) * Math.PI / 180;
+                          const dLatH = speed / 60;
+                          const dLonH = speed / (60 * Math.cos(lat * Math.PI / 180));
+                          let cLat = lat, cLon = lon, intensity = tw;
+                          for (let s = 0; s < GHOST_STEPS; s++) {
+                            cLat += dLatH * Math.cos(rad) * GHOST_INTERVAL;
+                            cLon += dLonH * Math.sin(rad) * GHOST_INTERVAL;
+                            intensity *= GHOST_DECAY;
+                            if (!isLand(cLat, cLon)) sources.push({ lat: cLat, lon: cLon, w: intensity });
+                          }
+                        }
+
+                        // Historical track positions
+                        for (let i = 0; i < track.length; i++) {
+                          const age = (i + 1) / track.length;
+                          sources.push({ lat: track[i].lat, lon: track[i].lon, w: tw * age * 0.4 });
+                        }
+                      }
+
+                      // 2. Build grid — dynamically sized to cover all sources
+                      if (!sources.length) return [];
+                      const pad = DANGER_RADIUS + 0.1;
+                      const latMin = Math.min(...sources.map(s => s.lat)) - pad;
+                      const latMax = Math.max(...sources.map(s => s.lat)) + pad;
+                      const lonMin = Math.min(...sources.map(s => s.lon)) - pad;
+                      const lonMax = Math.max(...sources.map(s => s.lon)) + pad;
+                      const grid = {};
+                      const radiusSq = DANGER_RADIUS * DANGER_RADIUS;
+
+                      for (const src of sources) {
+                        const cellLatMin = Math.floor((src.lat - DANGER_RADIUS - latMin) / CELL);
+                        const cellLatMax = Math.ceil((src.lat + DANGER_RADIUS - latMin) / CELL);
+                        const cellLonMin = Math.floor((src.lon - DANGER_RADIUS - lonMin) / CELL);
+                        const cellLonMax = Math.ceil((src.lon + DANGER_RADIUS - lonMin) / CELL);
+
+                        for (let cy = cellLatMin; cy <= cellLatMax; cy++) {
+                          for (let cx = cellLonMin; cx <= cellLonMax; cx++) {
+                            const cellLat = latMin + cy * CELL + CELL / 2;
+                            const cellLon = lonMin + cx * CELL + CELL / 2;
+                            if (cellLat < latMin || cellLat > latMax || cellLon < lonMin || cellLon > lonMax) continue;
+                            // Skip land cells
+                            if (isLand(cellLat, cellLon)) continue;
+                            const dLat = cellLat - src.lat;
+                            const dLon = cellLon - src.lon;
+                            const distSq = dLat * dLat + dLon * dLon;
+                            if (distSq > radiusSq) continue;
+                            const falloff = Math.exp(-3.0 * distSq / radiusSq);
+                            const key = `${cy},${cx}`;
+                            grid[key] = (grid[key] || 0) + src.w * falloff;
+                          }
+                        }
+                      }
+
+                      // 3. Normalise and emit [lat, lon, intensity]
+                      const entries = Object.entries(grid);
+                      if (!entries.length) return [];
+                      const maxVal = Math.max(...entries.map(([, v]) => v));
+                      if (maxVal === 0) return [];
+
+                      const out = [];
+                      for (const [key, val] of entries) {
+                        const [cy, cx] = key.split(",").map(Number);
+                        const lat = latMin + cy * CELL + CELL / 2;
+                        const lon = lonMin + cx * CELL + CELL / 2;
+                        const norm = val / maxVal;
+                        if (norm < 0.03) continue;
+                        out.push([lat, lon, norm]);
+                      }
+                      return out;
+                    }
+
+                    function HeatLayer({ points }) {
+                      const map = useMap();
+                      useEffect(() => {
+                        if (!points.length) return;
+                        const heat = L.heatLayer(points, {
+                          radius: 22,
+                          blur: 18,
+                          max: 0.5,
+                          maxZoom: 12,
+                          minOpacity: 0.04,
+                          gradient: { 0.15: "transparent", 0.3: "rgba(12,20,69,0.3)", 0.42: "#b45309", 0.55: "#d97706", 0.7: "#ea580c", 0.85: "#dc2626", 1.0: "#fef08a" },
+                        }).addTo(map);
+                        return () => map.removeLayer(heat);
+                      }, [map, points]);
+                      return null;
+                    }
+
                     function App() {
                       // State from both versions
                       const [selectedVesselImo, setSelectedVesselImo] = useState(null);
@@ -86,6 +257,7 @@
                       const [distance, setDistance] = useState(null);
                       const [timeIndex, setTimeIndex] = useState(0);
                       const [isPlaying, setIsPlaying] = useState(false);
+                      const [showHeatmap, setShowHeatmap] = useState(false);
 
                       const timeline = useMemo(() => getTimeline(MOCK_VESSELS), []);
                       const currentTs = timeline[timeIndex] || null;
@@ -123,6 +295,8 @@
                         }).filter(Boolean), [currentTs]
                       );
 
+                      const heatmapPoints = useMemo(() => showHeatmap ? generateHeatmapPoints(vesselsAtTime) : [], [vesselsAtTime, showHeatmap]);
+
                       const selectedVesselDetails = useMemo(() => {
                         if (!selectedVesselImo) return null;
                         const base = MOCK_VESSELS.find((v) => v.imo === selectedVesselImo);
@@ -153,6 +327,7 @@
                               <div className="w-full h-130 rounded-lg overflow-hidden border border-border relative">
                                 <MapContainer center={[26.2, 56.5]} zoom={8} className="h-full w-full z-0">
                                   <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; OpenStreetMap' />
+                                  {showHeatmap && <HeatLayer points={heatmapPoints} />}
 
                                   {startPoint && selectedVesselDetails?.point && (
                                     <Polyline 
@@ -198,6 +373,19 @@
                                     <span className="text-[11px] text-text-dim font-mono">{formattedTime}</span>
                                   </div>
                                 </div>
+
+                                {/* Heatmap Toggle */}
+                                <button
+                                  onClick={() => setShowHeatmap((prev) => !prev)}
+                                  className={`absolute top-3 z-[1001] flex items-center gap-2 px-3 py-2 rounded-lg border backdrop-blur-sm text-xs font-semibold transition-all duration-300 ${
+                                    showHeatmap
+                                      ? "bg-red-500/20 border-red-500/40 text-red-400"
+                                      : "bg-surface/90 border-border text-text-dim hover:text-text"
+                                  } ${selectedVesselDetails ? "right-[21rem]" : "right-3"}`}
+                                >
+                                  <span className={`w-2 h-2 rounded-full ${showHeatmap ? "bg-red-400 shadow-[0_0_6px_rgba(248,113,113,0.6)]" : "bg-text-dim/50"}`} />
+                                  HEATMAP
+                                </button>
 
                                 {/* Sidebar Panel */}
                                 <div className={`absolute top-0 right-0 h-full w-80 bg-surface/95 backdrop-blur-sm border-l border-border z-[1001] transition-transform duration-300 ${selectedVesselDetails ? "translate-x-0" : "translate-x-full"}`}>
