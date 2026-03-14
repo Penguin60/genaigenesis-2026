@@ -59,8 +59,29 @@ def read_root():
 
 @app.post("/api/v1/simulation/start")
 def start_simulation():
-    app.state.sim_start = time.time()
-    return {"message": "Simulation started", "start_time": app.state.sim_start}
+    data_path = os.path.join(os.path.dirname(__file__), "data", "test", "hackathon_test_data.csv")
+    if not os.path.exists(data_path):
+        raise HTTPException(status_code=404, detail="Hackathon data not found.")
+
+    df = pd.read_csv(data_path)
+    df = df[~df['TYPE'].str.lower().isin(['fishing', 'passenger'])]
+    df = df[df['CRAFT_ID'] != 'END']
+    df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'])
+
+    csv_start_time = df['TIMESTAMP'].min()
+    csv_end_time = df['TIMESTAMP'].max()
+    total_span_seconds = max((csv_end_time - csv_start_time).total_seconds(), 0.0)
+    half_span_seconds = total_span_seconds / 2
+
+    # Backdate sim_start so the first /simulation call lands around the dataset midpoint.
+    app.state.sim_start = time.time() - (half_span_seconds / app.state.sim_speed)
+    return {
+        "message": "Simulation started",
+        "start_time": app.state.sim_start,
+        "dataset_start": csv_start_time.isoformat(),
+        "dataset_end": csv_end_time.isoformat(),
+        "initial_offset_seconds": half_span_seconds,
+    }
 
 @app.get("/api/v1/simulation")
 def simulation():

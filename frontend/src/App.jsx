@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   MapContainer,
@@ -498,17 +498,23 @@ function App() {
   const [inputValue, setInputValue] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [distance, setDistance] = useState(null);
-  const [timeIndex, setTimeIndex] = useState(() =>
-    Math.max(TIMELINE_POINTS.length - 1, 0),
-  );
+  const [timeIndex, setTimeIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [followLatest, setFollowLatest] = useState(true);
   const [showHeatmap, setShowHeatmap] = useState(false);
+  const hasStartedSimulationRef = useRef(false);
 
   // TanStack Query for Backend Integration
   const { data: simData } = useQuery({
     queryKey: ["simulation"],
     queryFn: async () => {
       try {
+        if (!hasStartedSimulationRef.current) {
+          await fetch("http://localhost:8000/api/v1/simulation/start", {
+            method: "POST",
+          });
+          hasStartedSimulationRef.current = true;
+        }
         const res = await fetch("http://localhost:8000/api/v1/simulation");
         if (res.status === 400) {
           // Simulation probably not started, start it
@@ -555,16 +561,30 @@ function App() {
   }, []);
 
   useEffect(() => {
-    // Automatically advance time index if we're near the end of the available timeline
-    if (timeline.length > 0 && timeIndex >= timeline.length - 2 && !isPlaying) {
-      setTimeIndex(timeline.length - 1);
+    if (timeline.length === 0) return;
+    const lastIndex = timeline.length - 1;
+    if (followLatest) {
+      // In live mode, pin the timeline to the newest sample as data streams in.
+      setTimeIndex(lastIndex);
+      return;
     }
-  }, [timeline, isPlaying]);
+    if (timeIndex > lastIndex) {
+      setTimeIndex(lastIndex);
+    }
+  }, [timeline, followLatest, timeIndex]);
 
   useEffect(() => {
     if (!isPlaying || timeline.length < 2) return undefined;
     const timer = setInterval(() => {
-      setTimeIndex((prev) => (prev >= timeline.length - 1 ? 0 : prev + 1));
+      setTimeIndex((prev) => {
+        const lastIndex = timeline.length - 1;
+        if (prev >= lastIndex) {
+          setIsPlaying(false);
+          setFollowLatest(true);
+          return lastIndex;
+        }
+        return prev + 1;
+      });
     }, 900);
     return () => clearInterval(timer);
   }, [isPlaying, timeline.length]);
@@ -782,17 +802,41 @@ function App() {
               {" "}
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => setIsPlaying((prev) => !prev)}
+                  onClick={() => {
+                    setFollowLatest(false);
+                    setIsPlaying((prev) => !prev);
+                  }}
                   className="h-9 px-3 rounded-md border border-border text-xs font-semibold hover:bg-white/[0.04]"
                 >
                   {isPlaying ? "PAUSE" : "PLAY"}
+                </button>
+                <button
+                  onClick={() => {
+                    setIsPlaying(false);
+                    setFollowLatest(true);
+                    if (timeline.length > 0) {
+                      setTimeIndex(timeline.length - 1);
+                    }
+                  }}
+                  className={`h-9 px-3 rounded-md border text-xs font-semibold ${followLatest
+                    ? "border-red-400 text-red-300 bg-red-950/30"
+                    : "border-border hover:bg-white/[0.04]"
+                    }`}
+                >
+                  LIVE
                 </button>
                 <input
                   type="range"
                   min={0}
                   max={Math.max(timeline.length - 1, 0)}
                   value={timeIndex}
-                  onChange={(e) => setTimeIndex(Number(e.target.value))}
+                  onChange={(e) => {
+                    const nextIndex = Number(e.target.value);
+                    const lastIndex = Math.max(timeline.length - 1, 0);
+                    setTimeIndex(nextIndex);
+                    setIsPlaying(false);
+                    setFollowLatest(nextIndex >= lastIndex);
+                  }}
                   className="w-full accent-accent"
                 />
                 <span className="text-[11px] text-text-dim font-mono">
