@@ -11,7 +11,7 @@ const MOCK_VESSELS = [
   { name: "RED HORIZON", imo: "9601934", flag: "KH", type: "General Cargo", status: "Flag Hopping", lat: "26.10", lon: "55.80" },
 
   // GOOD VESSELS
-  { name: "EVER GLORY", imo: "9812345", flag: "SG", type: "Container Ship", status: "Compliant", lat: "25.20", lon: "55.50" },
+  { name: "EVER GLORY", imo: "9812345", flag: "SG", type: "Container Ship", status: "Compliant", lat: "25.20", lon: "54.5" },
   { name: "MAERSK SENTINEL", imo: "9723410", flag: "DK", type: "Cargo", status: "Compliant", lat: "25.80", lon: "55.90" },
   { name: "PACIFIC RAY", imo: "9910284", flag: "JP", type: "Bulk Carrier", status: "Compliant", lat: "26.45", lon: "57.10" },
   { name: "NORDIC PRIDE", imo: "9456711", flag: "NO", type: "Oil Tanker", status: "Compliant", lat: "26.15", lon: "56.95" }
@@ -92,7 +92,7 @@ function App() {
                   pathOptions={{ color: '#5b8def', weight: 2, dashArray: '5, 10' }}
                 />
               )}
-              {MOCK_VESSELS.map((v) => (
+              {/* {MOCK_VESSELS.map((v) => (
                 <CircleMarker
                   key={v.imo}
                   center={[parseFloat(v.lat), parseFloat(v.lon)]}
@@ -105,7 +105,30 @@ function App() {
                   }}
                   eventHandlers={{ click: () => setSelectedVessel(v) }}
                 />
-              ))}
+              ))} */}
+              {MOCK_VESSELS.map((v) => {
+                const isGood = v.status === "Compliant";
+
+                const greenColor = "oklch(52.7% 0.154 150.069)";
+                const redColor = "#ef4444";
+
+                return (
+                  <CircleMarker
+                    key={v.imo}
+                    center={[parseFloat(v.lat), parseFloat(v.lon)]}
+                    radius={5} 
+                    pathOptions={{
+                      color: selectedVessel?.imo === v.imo ? "#ffffff" : (isGood ? greenColor : redColor),
+                      fillColor: isGood ? greenColor : redColor,
+                      fillOpacity: 0.8,
+                      weight: selectedVessel?.imo === v.imo ? 3 : 1,
+                    }}
+                    eventHandlers={{
+                      click: () => setSelectedVessel(v),
+                    }}
+                  />
+                );
+              })}
               
             </MapContainer>
 
@@ -180,15 +203,24 @@ function App() {
                               ⊕ Use current location
                             </button>
                           )}
-                          {PORT_SUGGESTIONS.filter(p => p.name.toLowerCase().includes(inputValue.toLowerCase())).map(port => (
-                            <button 
-                              key={port.name}
-                              className="w-full px-4 py-3 text-left text-sm hover:bg-white/5 flex flex-col border-b border-border/30 last:border-0"
-                              onClick={() => { setStartPoint(port); setInputValue(port.name); setShowDropdown(false); }}
-                            >
-                              <span className="font-medium">{port.name}</span>
-                              <span className="text-[10px] text-text-dim font-mono">{port.lat}, {port.lon}</span>
-                            </button>
+                          {PORT_SUGGESTIONS.filter(p => 
+                              inputValue === "" || 
+                              inputValue === "Your Location" || 
+                              p.name.toLowerCase().includes(inputValue.toLowerCase())
+                            )
+                            .map(port => (
+                              <button 
+                                key={port.name}
+                                className="w-full px-4 py-3 text-left text-sm hover:bg-white/5 flex flex-col border-b border-border/30 last:border-0"
+                                onClick={() => { 
+                                  setStartPoint(port); 
+                                  setInputValue(port.name); 
+                                  setShowDropdown(false); 
+                                }}
+                              >
+                                <span className="font-medium">{port.name}</span>
+                                <span className="text-[10px] text-text-dim font-mono">{port.lat}, {port.lon}</span>
+                              </button>
                           ))}
                         </div>
                       )}
