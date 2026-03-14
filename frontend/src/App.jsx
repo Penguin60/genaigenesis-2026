@@ -230,6 +230,34 @@
                       return out;
                     }
 
+                    function getVesselHeading(vessel, currentTs) {
+                      const track = vessel.track || [];
+                      if (!currentTs || track.length < 2) return null;
+                      const target = new Date(currentTs).getTime();
+                      // Find the current point index
+                      let idx = -1;
+                      for (let i = 0; i < track.length; i++) {
+                        if (new Date(track[i].ts).getTime() <= target) idx = i;
+                      }
+                      // Use previous→current if available, otherwise current→next
+                      let p1, p2;
+                      if (idx > 0) {
+                        p1 = track[idx - 1]; p2 = track[idx];
+                      } else if (idx === 0 && track.length > 1) {
+                        p1 = track[0]; p2 = track[1];
+                      } else {
+                        return null;
+                      }
+                      const dy = p2.lat - p1.lat;
+                      const dx = p2.lon - p1.lon;
+                      return (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360;
+                    }
+
+                    function headingToCompass(deg) {
+                      const dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+                      return dirs[Math.round(deg / 22.5) % 16];
+                    }
+
                     function HeatLayer({ points }) {
                       const map = useMap();
                       useEffect(() => {
@@ -341,11 +369,44 @@
                                     const isGood = vessel.status === "Compliant";
                                     const greenColor = "oklch(52.7% 0.154 150.069)";
                                     const redColor = "#ef4444";
+                                    const heading = selectedVesselImo === vessel.imo ? getVesselHeading(vessel, currentTs) : null;
+                                    // Build a sleek direction indicator from vessel position
+                                    const arrowLine = (() => {
+                                      if (heading === null || !vessel.point) return null;
+                                      const rad = heading * Math.PI / 180;
+                                      const lat = vessel.point.lat;
+                                      const lon = vessel.point.lon;
+                                      // Tapered shaft: 3 segments getting progressively longer
+                                      const segments = [0.03, 0.065, 0.1];
+                                      const pts = segments.map(len => [
+                                        lat + len * Math.cos(rad),
+                                        lon + len * Math.sin(rad),
+                                      ]);
+                                      // Chevron arrowhead at the tip
+                                      const tip = pts[2];
+                                      const chevronBack = 0.025;
+                                      const chevronSpread = 0.55; // radians (~32 degrees)
+                                      const lWing = [tip[0] - chevronBack * Math.cos(rad - chevronSpread), tip[1] - chevronBack * Math.sin(rad - chevronSpread)];
+                                      const rWing = [tip[0] - chevronBack * Math.cos(rad + chevronSpread), tip[1] - chevronBack * Math.sin(rad + chevronSpread)];
+                                      return { shaft: [[lat, lon], ...pts], chevron: [lWing, tip, rWing] };
+                                    })();
 
                                     return (
                                       <div key={vessel.imo}>
                                         {selectedVesselImo === vessel.imo && trail.length > 1 && (
                                           <Polyline positions={trail} pathOptions={{ color: "#f8fafc", weight: 4, opacity: 0.65 }} />
+                                        )}
+                                        {arrowLine && (
+                                          <>
+                                            {/* Glow layer */}
+                                            <Polyline positions={arrowLine.shaft} pathOptions={{ color: "#facc15", weight: 5, opacity: 0.1, lineCap: "round" }} />
+                                            {/* Main shaft */}
+                                            <Polyline positions={arrowLine.shaft} pathOptions={{ color: "#facc15", weight: 2, opacity: 0.45, lineCap: "round" }} />
+                                            {/* Chevron head - glow */}
+                                            <Polyline positions={arrowLine.chevron} pathOptions={{ color: "#facc15", weight: 5, opacity: 0.12, lineCap: "round", lineJoin: "round" }} />
+                                            {/* Chevron head */}
+                                            <Polyline positions={arrowLine.chevron} pathOptions={{ color: "#fde047", weight: 2.5, opacity: 0.5, lineCap: "round", lineJoin: "round" }} />
+                                          </>
                                         )}
                                         <CircleMarker
                                           center={[vessel.point.lat, vessel.point.lon]}
@@ -414,6 +475,21 @@
                                             {selectedVesselDetails.point ? `${selectedVesselDetails.point.lat.toFixed(3)}°N, ${selectedVesselDetails.point.lon.toFixed(3)}°E` : "N/A"}
                                           </p>
                                         </div>
+                                        {(() => {
+                                          const h = getVesselHeading(selectedVesselDetails, currentTs);
+                                          if (h === null) return null;
+                                          return (
+                                            <div>
+                                              <span className="text-[11px] uppercase text-text-dim tracking-wide">Heading</span>
+                                              <div className="flex items-center gap-3 mt-1">
+                                                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-white/[0.06] border border-border">
+                                                  <span style={{ transform: `rotate(${h}deg)`, display: "inline-block", fontSize: "16px", lineHeight: 1 }}>↑</span>
+                                                </span>
+                                                <span className="font-mono text-sm">{h.toFixed(1)}° {headingToCompass(h)}</span>
+                                              </div>
+                                            </div>
+                                          );
+                                        })()}
 
                                         <div className="pt-2 relative">
                                           <div className="flex justify-between items-center mb-2">
