@@ -531,6 +531,7 @@ function countryCodeToFlagEmoji(countryCode) {
 	} else if (code.length !== 2) {
 		return "🏳️";
 	}
+    console.log(code.replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt())));
 	return code.replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt()));
 }
 
@@ -597,7 +598,7 @@ function App() {
 				return { vessels: [] };
 			}
 		},
-		refetchInterval: 1000,
+		refetchInterval: 250,
 	});
 
 	const MOCK_VESSELS = useMemo(() => simData?.vessels || [], [simData]);

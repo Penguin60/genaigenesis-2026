@@ -44,7 +44,7 @@ app.add_middleware(
 
 app.state.sim_start = None
 app.state.sim_csv_start = None
-app.state.sim_speed = 300
+app.state.sim_speed = 600
 
 class VesselRequest(BaseModel):
     mmsi: str
@@ -179,9 +179,6 @@ def simulation():
     
     vessels = {}
     for mmsi, group in df_visible.groupby('MMSI'):
-        if (mmsi == 2000016):
-            print(group)
-            print(current_sim_time)
         group_sorted = group.sort_values('TIMESTAMP')
         pings = group_sorted.to_dict('records')
         
