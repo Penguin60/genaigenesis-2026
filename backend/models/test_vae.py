@@ -70,7 +70,8 @@ def run_hackathon_demo():
         mmsi = seq[0]['MMSI']
         
         # We know if it's anomalous based on how we generated the Track_ID
-        is_actually_anomalous = "ANOM" in track_id
+        # is_actually_anomalous = "ANOM" in track_id
+        is_actually_anomalous = seq[0]["ANOMALY_TYPE"] != "none"
         if is_actually_anomalous:
             total_anomalous += 1
         else:

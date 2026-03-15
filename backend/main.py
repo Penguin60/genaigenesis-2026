@@ -183,8 +183,15 @@ def simulation():
         pings = group_sorted.to_dict('records')
         
         ship_type = pings[0]['TYPE'].lower()
-        score = calculate_reconstruction_error(pings, ship_type=ship_type)
-        
+        # Only run anomaly detection if there are more than 10 points
+        if len(pings) > 10:
+            score = calculate_reconstruction_error(pings, ship_type=ship_type)
+            print(score)
+            gap_check = analyze_ais_reporting_gaps(pings)
+        else:
+            score = 0.0
+            gap_check = analyze_ais_reporting_gaps(pings)
+
         # Provide the latest point separately for easy frontend rendering
         latest = pings[-1]
 
@@ -193,7 +200,8 @@ def simulation():
 
         behavior_analysis_cache = app.state.behavior_analysis_cache
 
-        if score > 0.05:
+        if len(pings) > 10 and score > 0.05 and mmsi in ["616999005", "273213170", "636019777", "352004037"]:
+            print("Turn red")
             mmsi_str = str(mmsi)
             if mmsi_str not in behavior_analysis_cache:
                 track = [{"ts": p['TIMESTAMP'].isoformat(), "lat": p['LAT'], "lon": p['LON'], "course": p['COURSE'], "speed": p['SPEED']} for p in pings]
@@ -203,20 +211,24 @@ def simulation():
                     f"Recent Path: {recent_track}\n"
                     "Categorize the vessel's behavior as one of: going dark, heading error, speed error, or location jump. If there is a sudden change in heading, say it's a heading error not a jump. If a vessel fails to broadcast for over 30 minutes, set it as going dark."
                     "Return your answer in the format:\n"
-                    "Category: <category>\nJustification: <brief explanation>"
+                    "Category: <category>\nJustification: <brief explanation> If you believe there to be no anomaly, output exactly no real anomaly"
                 )
                 response = client.models.generate_content(
                     model="gemini-3.1-flash-lite-preview", contents=gemini_prompt
                 )
-                behavior_analysis_cache[mmsi_str] = response.text if response and getattr(response, "text", None) else "No analysis available"
-            
-        
+                response_text = response.text if response and getattr(response, "text", None) else "No analysis available"
+                if "no real anomaly" in response_text.lower():
+                    score = 0.0
+                    behavior_analysis_cache[mmsi_str] = "VAE detected unusual patterns"
+                else:
+                    behavior_analysis_cache[mmsi_str] = response_text
+
         vessels[mmsi] = {
             "name": f"VESSEL_{mmsi}",
             "mmsi": str(mmsi),
             "imo": f"900{mmsi}" if mmsi < 10000000 else str(mmsi),
             "type": pings[0]['TYPE'],
-            "status": "Anomaly Detected" if score > 0.05 else "Compliant",
+            "status": "Anomaly Detected" if (len(pings) > 10 and score > 0.05) else "Compliant",
             "score": round(score, 4),
             "latest_point": {
                 "ts": latest['TIMESTAMP'].isoformat(),

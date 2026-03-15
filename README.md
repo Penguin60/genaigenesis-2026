@@ -1,11 +1,3 @@
-<<<<<<< HEAD
-# genaigenesis-2026
-We built using Railtracks
-
-To power intelligent maritime analysis, we integrated IBM Watson AI models into our system using Railtracks, which served as the orchestration layer between our application logic and the underlying language models.
-
-Railtracks allowed us to structure and manage AI-driven workflows in a modular way. Instead of making direct, unstructured model calls, we defined controlled pipelines that pass relevant vessel data, behavioral signals, and context into the Watson model. This ensures that the model receives structured information about maritime activity such as AIS gaps, routing anomalies, and vessel metadata before generating insights.
-=======
 # Popeye
 
 Maritime intelligence platform focused on helping ship captains avoid accidental collisions while operating in complex and congested waters.
@@ -20,6 +12,13 @@ Popeye combines movement anomalies, AIS silence periods, vessel context, and map
 - Shadow Risk Index-style vessel analysis endpoints.
 - Operator chat/advisory flow powered by IBM watsonx.
 - Interactive map UI with vessel trails, statuses, and risk overlays.
+
+## Railtracks
+We built using Railtracks
+
+To power intelligent maritime analysis, we integrated IBM Watson AI models into our system using Railtracks, which served as the orchestration layer between our application logic and the underlying language models.
+
+Railtracks allowed us to structure and manage AI-driven workflows in a modular way. Instead of making direct, unstructured model calls, we defined controlled pipelines that pass relevant vessel data, behavioral signals, and context into the Watson model. This ensures that the model receives structured information about maritime activity such as AIS gaps, routing anomalies, and vessel metadata before generating insights.
 
 ## Repository Structure
 
@@ -147,4 +146,3 @@ npm run dev
 ## License
 
 No license file is currently defined in this repository.
->>>>>>> 8b0f2b4 (Add README)
