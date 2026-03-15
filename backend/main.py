@@ -15,7 +15,7 @@ from scoring.risk_calculator import calculate_sri
 from agents.orchestrator import query_agent
 from agents.info_agents import run_info_agents
 from agents.chat_agent import run_chat
-from ingestion.vessel_checks import check_retirement, get_ship_age
+from ingestion.vessel_checks import check_retirement, get_ship_age, get_insurer_data, get_registration_data
 from models.trajectory_vae import calculate_reconstruction_error
 from scoring.gap_check import analyze_ais_reporting_gaps
 
@@ -68,6 +68,15 @@ def start_simulation():
     df = df[~df['TYPE'].str.lower().isin(['fishing', 'passenger'])]
     df = df[df['CRAFT_ID'] != 'END']
     df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'])
+
+    vessel_info_cache = {}
+    for mmsi in df['MMSI'].unique():
+        vessel_info_cache[mmsi] = {
+            "retirement": check_retirement(mmsi=mmsi),
+            "age": get_ship_age(mmsi=mmsi),
+            "insurer": get_insurer_data(mmsi=mmsi),
+            "registration": get_registration_data(mmsi=mmsi),
+        }
 
     csv_start_time = df['TIMESTAMP'].min()
     csv_end_time = df['TIMESTAMP'].max()
