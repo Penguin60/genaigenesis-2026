@@ -8,8 +8,10 @@ import os
 import pandas as pd
 import time
 import torch
+from pathlib import Path
 
-load_dotenv()
+env_path = Path(__file__).resolve().parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 from scoring.risk_calculator import calculate_sri
 from agents.orchestrator import query_agent
@@ -36,7 +38,7 @@ app.add_middleware(
 
 app.state.sim_start = None
 app.state.sim_csv_start = None
-app.state.sim_speed = 300
+app.state.sim_speed = 600
 
 class VesselRequest(BaseModel):
     mmsi: str
@@ -108,33 +110,22 @@ def simulation():
     
     vessels = {}
     for mmsi, group in df_visible.groupby('MMSI'):
-        if (mmsi == 2000016):
-            print(group)
-            print(current_sim_time)
         group_sorted = group.sort_values('TIMESTAMP')
-        pings = group_sorted.to_dict('records')
+        latest = group_sorted.iloc[-1]
         
-        ship_type = pings[0]['TYPE'].lower()
-        score = calculate_reconstruction_error(pings, ship_type=ship_type)
-        
-        # Provide the latest point separately for easy frontend rendering
-        latest = pings[-1]
-        
+        mmsi_int = int(mmsi)
         vessels[mmsi] = {
             "name": f"VESSEL_{mmsi}",
             "mmsi": str(mmsi),
-            "imo": f"900{mmsi}" if mmsi < 10000000 else str(mmsi),
-            "type": pings[0]['TYPE'],
-            "status": "Anomaly Detected" if score > 0.05 else "Compliant",
-            "score": round(score, 4),
+            "imo": f"900{mmsi}" if mmsi_int < 10000000 else str(mmsi),
+            "type": latest['TYPE'],
             "latest_point": {
                 "ts": latest['TIMESTAMP'].isoformat(),
                 "lat": latest['LAT'],
                 "lon": latest['LON'],
                 "course": latest['COURSE'],
                 "speed": latest['SPEED']
-            },
-            "track": [{"ts": p['TIMESTAMP'].isoformat(), "lat": p['LAT'], "lon": p['LON'], "course": p['COURSE'], "speed": p['SPEED']} for p in pings]
+            }
         }
 
     return {

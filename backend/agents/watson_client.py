@@ -28,7 +28,7 @@ def get_watsonx_model() -> ModelInference:
         _model_instance = ModelInference(
             model_id=model_id,
             params={
-                GenParams.MAX_NEW_TOKENS: 300,
+                GenParams.MAX_NEW_TOKENS: 1,
                 GenParams.TEMPERATURE: 0.2,
                 GenParams.TOP_P: 0.9,
                 GenParams.REPETITION_PENALTY: 1.1,

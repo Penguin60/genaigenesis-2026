@@ -15,13 +15,12 @@ from agents.watson_client import get_watsonx_model
 class InfoAgentState(TypedDict):
     imo: str
     mmsi: str
-    # Raw data populated by fetch_raw_data node
+    trajectory: list  # <-- add this line
     raw_insurer: Dict[str, Any]
     raw_registration: Dict[str, Any]
-    # Agent results populated by parallel agent nodes
     insurer_result: Dict[str, Any]
     registration_result: Dict[str, Any]
-    # Final aggregated output
+    anomaly_reason_result: Dict[str, Any]  # <-- add this line
     aggregated: Dict[str, Any]
 
 
@@ -40,6 +39,17 @@ Respond in this exact format:
 RELIABLE: YES or NO
 RISK_LEVEL: LOW, MEDIUM, or HIGH
 ANALYSIS: A brief 1-2 sentence explanation of your assessment.
+"""
+
+ANOMALY_REASON_PROMPT = """You are a maritime anomaly detection expert. Given the following AIS trajectory for a vessel, analyze and explain if there is any anomaly, such as zigzag pattern, teleportation, or AIS gap. Return a short reason.
+
+Vessel IMO: {imo}
+Vessel MMSI: {mmsi}
+Trajectory:
+{trajectory}
+
+Respond in this exact format:
+REASON: <short reason or NONE>
 """
 
 REGISTRATION_PROMPT = """You are a maritime compliance analyst specializing in flag state analysis. Given the following vessel registration data, determine whether the flag state is a known flag of convenience commonly used by shadow fleet ships.
@@ -152,12 +162,34 @@ def registration_agent(state: InfoAgentState) -> dict:
     }
 
 
+def anomaly_reason_agent(state: InfoAgentState) -> dict:
+    """
+    Analyze the vessel's trajectory using IBM watsonx to explain the anomaly reason.
+    """
+    trajectory = state.get("trajectory", [])
+    if not trajectory:
+        return {"anomaly_reason_result": {"reason": "NONE", "raw_llm_response": ""}}
+
+    prompt = ANOMALY_REASON_PROMPT.format(
+        imo=state["imo"],
+        mmsi=state["mmsi"],
+        trajectory=trajectory,
+    )
+    llm_response = _call_watsonx(prompt)
+    parsed = _parse_llm_response(llm_response)
+    return {
+        "anomaly_reason_result": {
+            "reason": parsed.get("REASON", llm_response),
+            "raw_llm_response": llm_response,
+        }
+    }
+
 def aggregate(state: InfoAgentState) -> dict:
-    """Merge parallel agent results into a single output dict."""
     return {
         "aggregated": {
             "insurer": state["insurer_result"],
             "registration": state["registration_result"],
+            "anomaly_reason": state.get("anomaly_reason_result", {}),
         }
     }
 
@@ -180,6 +212,7 @@ def build_info_graph() -> StateGraph:
     graph.add_node("fetch_raw_data", fetch_raw_data)
     graph.add_node("insurer_agent", insurer_agent)
     graph.add_node("registration_agent", registration_agent)
+    graph.add_node("anomaly_reason_agent", anomaly_reason_agent)
     graph.add_node("aggregate", aggregate)
 
     # Edges: START → fetch_raw_data
@@ -188,10 +221,12 @@ def build_info_graph() -> StateGraph:
     # Fan-out: fetch_raw_data → two agents in parallel
     graph.add_edge("fetch_raw_data", "insurer_agent")
     graph.add_edge("fetch_raw_data", "registration_agent")
+    graph.add_edge("fetch_raw_data", "anomaly_reason_agent")
 
     # Fan-in: both agents → aggregate
     graph.add_edge("insurer_agent", "aggregate")
     graph.add_edge("registration_agent", "aggregate")
+    graph.add_edge("anomaly_reason_agent", "aggregate")
 
     # aggregate → END
     graph.add_edge("aggregate", END)
@@ -203,20 +238,17 @@ def build_info_graph() -> StateGraph:
 info_agent_app = build_info_graph()
 
 
-def run_info_agents(imo: Optional[str] = None, mmsi: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Public entry point. Runs the parallel info agent graph and
-    returns the aggregated results for insurer and registration.
-    """
+def run_info_agents(imo: Optional[str] = None, mmsi: Optional[str] = None, trajectory: Optional[list] = None) -> Dict[str, Any]:
     initial_state: InfoAgentState = {
         "imo": imo or "",
         "mmsi": mmsi or "",
+        "trajectory": trajectory or [],  # <-- add this
         "raw_insurer": {},
         "raw_registration": {},
         "insurer_result": {},
         "registration_result": {},
+        "anomaly_reason_result": {},  # <-- add this
         "aggregated": {},
     }
-
     result = info_agent_app.invoke(initial_state)
     return result.get("aggregated", {})
