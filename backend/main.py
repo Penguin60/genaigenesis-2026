@@ -1,3 +1,5 @@
+import re
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -8,8 +10,14 @@ import os
 import pandas as pd
 import time
 import torch
+import requests
+from google import genai
 
 load_dotenv()
+
+client = genai.Client()
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 from scoring.risk_calculator import calculate_sri
 from agents.orchestrator import query_agent
@@ -70,13 +78,59 @@ def start_simulation():
     df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'])
 
     vessel_info_cache = {}
+    vessel_prompt_result_cache = {}
+    vessel_prompt_score_cache = {}
+    vessel_flag_cache = {}
+
+    prompt = """You are a maritime risk analysis assistant. For each vessel, you will receive structured data including retirement status, age, insurer information, and registration details. Please provide a holistic risk assessment for the vessel, considering:
+
+If the registration country is a common flag-of-convenience or AIS spoofing country (e.g., Comoros, Panama, Liberia, Marshall Islands, Togo, Palau, Cook Islands, Gabon, Cameroon, Mongolia, Belize, St. Kitts and Nevis, Sierra Leone).
+If the vessel is older than 15 years.
+If the insurer is unknown or marked as high risk.
+Any other relevant risk factors in the data.
+Here is the vessel data:
+
+"""
+    # Collect all vessel infos
+    all_vessel_infos = []
+    mmsi_list = []
     for mmsi in df['MMSI'].unique():
-        vessel_info_cache[mmsi] = {
+        vessel_info = {
             "retirement": check_retirement(mmsi=mmsi),
             "age": get_ship_age(mmsi=mmsi),
             "insurer": get_insurer_data(mmsi=mmsi),
             "registration": get_registration_data(mmsi=mmsi),
         }
+        vessel_info_cache[mmsi] = vessel_info
+        mmsi_list.append(str(mmsi))
+        print("running")
+        all_vessel_infos.append(f"MMSI: {mmsi}\n{vessel_info}")
+        print(vessel_info["registration"])
+        vessel_flag_cache[str(mmsi)] = vessel_info["registration"].get("country", "Unknown")
+
+    batch_prompt = prompt + "\n\n".join(all_vessel_infos) + """\n\nFor each vessel above, provide a concise risk summary and highlight any red flags or suspicious factors. Also provide a risk score from 0 to 1, be conservative in your estimates especially for insurance as the API has some issues. Your response should be limited to a maximum of 3 bullet points per vessel, in the same order as input, separated by \n---\n. Do not use emojis. Do not include a header at the beginning of your response like MMSI: xxxxxxx. Instead, here is a sample * Multiple red flags including an age of 22 years and status indicating it should be retired.
+* High-risk registration in Comoros, frequently used to obscure vessel activity and origin.
+* Lacks a known insurer and is linked to shell company risk and high-risk ownership structures.
+Data Risk Score: 0.23"""
+
+    response = client.models.generate_content(
+        model="gemini-3.1-flash-lite-preview", contents=batch_prompt
+    )
+    if not response or not getattr(response, "text", None):
+        for mmsi in mmsi_list:
+            vessel_prompt_result_cache[str(mmsi)] = "AI summary not available"
+    else:
+        summaries = response.text.split("---")
+        for idx, mmsi in enumerate(mmsi_list):
+            vessel_prompt_result_cache[str(mmsi)] = summaries[idx].strip() if idx < len(summaries) else "No summary returned."
+            match = re.search(r"Risk Score:\s*([0-1](?:\.\d+)?)", summaries[idx].strip() if idx < len(summaries) else "No summary returned.")
+            if match:
+                vessel_prompt_score_cache[str(mmsi)] = float(match.group(1))
+            else:
+                vessel_prompt_score_cache[str(mmsi)] = None
+    print(response)
+
+    print(vessel_prompt_result_cache)
 
     csv_start_time = df['TIMESTAMP'].min()
     csv_end_time = df['TIMESTAMP'].max()
@@ -85,12 +139,20 @@ def start_simulation():
     
     app.state.sim_csv_start = csv_start_time + pd.Timedelta(seconds=initial_offset_seconds)
     app.state.sim_start = time.time()
+
+    app.state.vessel_prompt_result_cache = vessel_prompt_result_cache
+    app.state.vessel_prompt_score_cache = vessel_prompt_score_cache
+
+    app.state.vessel_flag_cache = vessel_flag_cache
     
     return {
         "message": "Simulation started",
         "start_time": app.state.sim_start,
         "csv_start_reference": app.state.sim_csv_start.isoformat(),
         "initial_offset_seconds": initial_offset_seconds,
+        "vessel_prompt_results": vessel_prompt_result_cache,
+        "vessel_prompt_scores": vessel_prompt_score_cache,
+        "vessel_flags": vessel_flag_cache,
     }
 
 @app.get("/api/v1/simulation")
@@ -128,6 +190,29 @@ def simulation():
         
         # Provide the latest point separately for easy frontend rendering
         latest = pings[-1]
+
+        if not hasattr(app.state, "behavior_analysis_cache"):
+            app.state.behavior_analysis_cache = {}
+
+        behavior_analysis_cache = app.state.behavior_analysis_cache
+
+        if score > 0.05:
+            mmsi_str = str(mmsi)
+            if mmsi_str not in behavior_analysis_cache:
+                track = [{"ts": p['TIMESTAMP'].isoformat(), "lat": p['LAT'], "lon": p['LON'], "course": p['COURSE'], "speed": p['SPEED']} for p in pings]
+                recent_track = track[-10:]
+                gemini_prompt = (
+                    f"Vessel MMSI: {mmsi_str}\n"
+                    f"Recent Path: {recent_track}\n"
+                    "Categorize the vessel's behavior as one of: going dark, heading error, speed error, or location jump. "
+                    "Return your answer in the format:\n"
+                    "Category: <category>\nJustification: <brief explanation>"
+                )
+                response = client.models.generate_content(
+                    model="gemini-3.1-flash-lite-preview", contents=gemini_prompt
+                )
+                behavior_analysis_cache[mmsi_str] = response.text if response and getattr(response, "text", None) else "No analysis available"
+            
         
         vessels[mmsi] = {
             "name": f"VESSEL_{mmsi}",
@@ -148,7 +233,8 @@ def simulation():
 
     return {
         "current_sim_time": current_sim_time.isoformat(),
-        "vessels": list(vessels.values())
+        "vessels": list(vessels.values()),
+        "behavior_analysis": app.state.behavior_analysis_cache
     }
 
 @app.post("/api/v1/analyze-vessel")
