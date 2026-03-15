@@ -29,3 +29,11 @@ body {
 .leaflet-interactive {
   filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.7)) drop-shadow(0 0 12px rgba(239, 68, 68, 0.4));
 }
+
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;  
+}
+*::-webkit-scrollbar {
+  display: none; 
+}

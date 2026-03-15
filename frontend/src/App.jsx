@@ -516,11 +516,22 @@ function headingToCompass(deg) {
 	return dirs[Math.round(deg / 22.5) % 16];
 }
 
+// Map 3-letter country codes to 2-letter codes for flag emoji
+const COUNTRY_3_TO_2 = {
+	USA: "US", GBR: "GB", FRA: "FR", DEU: "DE", ESP: "ES", ITA: "IT", NLD: "NL", NOR: "NO", DNK: "DK", SWE: "SE", FIN: "FI", RUS: "RU", JPN: "JP", CHN: "CN", KOR: "KR", SGP: "SG", IND: "IN", AUS: "AU", CAN: "CA", BRA: "BR", MEX: "MX", TUR: "TR", GRC: "GR", IRL: "IE", PRT: "PT", POL: "PL", EST: "EE", LVA: "LV", LTU: "LT", CYP: "CY", MLT: "MT", MAR: "MA", EGY: "EG", ZAF: "ZA", NZL: "NZ", ARG: "AR", CHL: "CL", COL: "CO", PAN: "PA", KHM: "KH", KWT: "KW", QAT: "QA", ARE: "AE", SAU: "SA", OMN: "OM", IRN: "IR", ISR: "IL", LBN: "LB", SYR: "SY", IRQ: "IQ", LBY: "LY", TUN: "TN", ALG: "DZ", CMR: "CM", MYS: "MY", IDN: "ID", VNM: "VN", THA: "TH", PHL: "PH", HKG: "HK", TWN: "TW", // Add more as needed
+};
 function countryCodeToFlagEmoji(countryCode) {
 	if (!countryCode) return "🏳️";
-	return countryCode
-		.toUpperCase()
-		.replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt()));
+	let code = countryCode.toUpperCase();
+	if (code.length === 3 && COUNTRY_3_TO_2[code]) {
+		code = COUNTRY_3_TO_2[code];
+	} else if (code.length === 3) {
+		// Fallback: use first 2 letters if mapping not found
+		code = code.slice(0, 2);
+	} else if (code.length !== 2) {
+		return "🏳️";
+	}
+	return code.replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt()));
 }
 
 function App() {
@@ -749,7 +760,9 @@ function App() {
 								// Build a sleek direction indicator from vessel position
 								const arrowLine = (() => {
 									if (heading === null || !vessel.point) return null;
-									const rad = (heading * Math.PI) / 180;
+									// Use reported course instead of actual heading if available
+									const intended = vessel.point?.course ?? heading;
+									const rad = (intended * Math.PI) / 180;
 									const lat = vessel.point.lat;
 									const lon = vessel.point.lon;
 									// Tapered shaft: 3 segments getting progressively longer
@@ -987,8 +1000,6 @@ function App() {
 												<span style={{ fontSize: "1.5em" }}>
 													{countryCodeToFlagEmoji(
 														vesselFlags[selectedVesselDetails?.mmsi]
-															?.toUpperCase()
-															.slice(0, 2),
 													)}
 												</span>
 												<span className="font-mono text-sm">
@@ -1025,8 +1036,8 @@ function App() {
 													</span>
 													<p>
 														Reported Heading:{" "}
-														{selectedVesselDetails.latest_point.course}
 													</p>
+                                                    <span className="font-mono text-sm">{Number(selectedVesselDetails.latest_point.course).toFixed(1)}° {headingToCompass(Number(selectedVesselDetails.latest_point.course).toFixed(1))}</span>
 													<p>Actual Heading: </p>
 													<div className="flex items-center gap-3 mt-1">
 														<span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-white/[0.06] border border-border">
@@ -1042,7 +1053,7 @@ function App() {
 															</span>
 														</span>
 														<span className="font-mono text-sm">
-															{h.toFixed(1)}° {headingToCompass(h)}
+															{Number(h).toFixed(1)}° {headingToCompass(h)}
 														</span>
 													</div>
 													<span className="text-[11px] uppercase text-text-dim tracking-wide">
@@ -1050,94 +1061,17 @@ function App() {
 													</span>
 													<p>
 														Reported Speed:{" "}
-														{selectedVesselDetails.latest_point.speed} knots
 													</p>
-													<p>Actual Speed</p>
+                                                    <span className="font-mono text-sm">{Number(selectedVesselDetails.latest_point.speed).toFixed(1)} knots</span>
+													<p>Actual Speed: </p>
 													<div className="flex items-center gap-3 mt-1">
-														<span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-white/[0.06] border border-border">
-															<span
-																style={{
-																	transform: `rotate(${h}deg)`,
-																	display: "inline-block",
-																	fontSize: "16px",
-																	lineHeight: 1,
-																}}
-															>
-																↑
-															</span>
-														</span>
 														<span className="font-mono text-sm">
-															{s.toFixed(1)}
+															{s.toFixed(1)} knots
 														</span>
 													</div>
 												</div>
 											);
 										})()}
-
-										<div className="pt-2 relative">
-											<div className="flex justify-between items-center mb-2">
-												<span className="text-[11px] uppercase text-text-dim tracking-wide">
-													Find route from
-												</span>
-												{distance && (
-													<span className="text-[11px] font-mono text-accent animate-pulse">
-														{distance} NM
-													</span>
-												)}
-											</div>
-											<div className="relative">
-												<input
-													type="text"
-													value={inputValue}
-													onChange={(e) => {
-														setInputValue(e.target.value);
-														setShowDropdown(true);
-													}}
-													onFocus={() => setShowDropdown(true)}
-													placeholder="Search origin port..."
-													className="w-full h-11 pl-5 pr-12 text-sm bg-bg border border-border rounded-full outline-none"
-												/>
-											</div>
-											{showDropdown && (
-												<div className="absolute left-0 right-0 mt-2 bg-surface border border-border rounded-xl shadow-2xl z-[1002] max-h-48 overflow-y-auto">
-													{userGPS && (
-														<button
-															className="w-full px-4 py-3 text-left text-sm hover:bg-white/5 text-accent border-b border-border"
-															onClick={() => {
-																setStartPoint(userGPS);
-																setInputValue("Your Location");
-																setShowDropdown(false);
-															}}
-														>
-															⊕ Use current location
-														</button>
-													)}
-													{PORT_SUGGESTIONS.filter(
-														(p) =>
-															inputValue === "" ||
-															inputValue === "Your Location" ||
-															p.name
-																.toLowerCase()
-																.includes(inputValue.toLowerCase()),
-													).map((port) => (
-														<button
-															key={port.name}
-															className="w-full px-4 py-3 text-left text-sm hover:bg-white/5 flex flex-col border-b border-border/30 last:border-0"
-															onClick={() => {
-																setStartPoint(port);
-																setInputValue(port.name);
-																setShowDropdown(false);
-															}}
-														>
-															<span className="font-medium">{port.name}</span>
-															<span className="text-[10px] text-text-dim font-mono">
-																{port.lat}, {port.lon}
-															</span>
-														</button>
-													))}
-												</div>
-											)}
-										</div>
 									</div>
 								</div>
 							)}
@@ -1155,7 +1089,7 @@ function App() {
 								<tr>
 									{[
 										"Vessel",
-										"IMO",
+										"MMIS",
 										"Flag",
 										"Type",
 										"Status",

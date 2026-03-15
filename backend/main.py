@@ -204,7 +204,7 @@ def simulation():
                 gemini_prompt = (
                     f"Vessel MMSI: {mmsi_str}\n"
                     f"Recent Path: {recent_track}\n"
-                    "Categorize the vessel's behavior as one of: going dark, heading error, speed error, or location jump. "
+                    "Categorize the vessel's behavior as one of: going dark, heading error, speed error, or location jump. If there is a sudden change in heading, say it's a heading error not a jump. If a vessel fails to broadcast for over 30 minutes, set it as going dark."
                     "Return your answer in the format:\n"
                     "Category: <category>\nJustification: <brief explanation>"
                 )
