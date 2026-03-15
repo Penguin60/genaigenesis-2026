@@ -200,7 +200,7 @@ def simulation():
 
         behavior_analysis_cache = app.state.behavior_analysis_cache
 
-        if len(pings) > 10 and score > 0.05 and mmsi in ["616999005", "273213170", "636019777", "352004037"]:
+        if len(pings) > 10 and score > 0.05:
             print("Turn red")
             mmsi_str = str(mmsi)
             if mmsi_str not in behavior_analysis_cache:
