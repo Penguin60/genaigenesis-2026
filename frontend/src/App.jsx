@@ -462,36 +462,36 @@ function getVesselHeading(vessel, currentTs) {
 }
 
 function getVesselSpeed(vessel, currentTs) {
-    const track = vessel.track || [];
-    if (!currentTs || track.length < 2) return null;
-    const target = new Date(currentTs).getTime();
-    let idx = -1;
-    for (let i = 0; i < track.length; i++) {
-        if (new Date(track[i].ts).getTime() <= target) idx = i;
-    }
-    let p1, p2;
-    if (idx > 0) {
-        p1 = track[idx - 1];
-        p2 = track[idx];
-    } else if (idx === 0 && track.length > 1) {
-        p1 = track[0];
-        p2 = track[1];
-    } else {
-        return null;
-    }
-    // Haversine distance in nautical miles
-    const R = 3440.065;
-    const dLat = (p2.lat - p1.lat) * (Math.PI / 180);
-    const dLon = (p2.lon - p1.lon) * (Math.PI / 180);
-    const a =
-        Math.sin(dLat / 2) ** 2 +
-        Math.cos((p1.lat * Math.PI) / 180) *
-            Math.cos((p2.lat * Math.PI) / 180) *
-            Math.sin(dLon / 2) ** 2;
-    const distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const timeHours = (new Date(p2.ts) - new Date(p1.ts)) / (1000 * 60 * 60);
-    if (timeHours === 0) return 0;
-    return distance / timeHours;
+	const track = vessel.track || [];
+	if (!currentTs || track.length < 2) return null;
+	const target = new Date(currentTs).getTime();
+	let idx = -1;
+	for (let i = 0; i < track.length; i++) {
+		if (new Date(track[i].ts).getTime() <= target) idx = i;
+	}
+	let p1, p2;
+	if (idx > 0) {
+		p1 = track[idx - 1];
+		p2 = track[idx];
+	} else if (idx === 0 && track.length > 1) {
+		p1 = track[0];
+		p2 = track[1];
+	} else {
+		return null;
+	}
+	// Haversine distance in nautical miles
+	const R = 3440.065;
+	const dLat = (p2.lat - p1.lat) * (Math.PI / 180);
+	const dLon = (p2.lon - p1.lon) * (Math.PI / 180);
+	const a =
+		Math.sin(dLat / 2) ** 2 +
+		Math.cos((p1.lat * Math.PI) / 180) *
+			Math.cos((p2.lat * Math.PI) / 180) *
+			Math.sin(dLon / 2) ** 2;
+	const distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+	const timeHours = (new Date(p2.ts) - new Date(p1.ts)) / (1000 * 60 * 60);
+	if (timeHours === 0) return 0;
+	return distance / timeHours;
 }
 
 function headingToCompass(deg) {
@@ -516,6 +516,13 @@ function headingToCompass(deg) {
 	return dirs[Math.round(deg / 22.5) % 16];
 }
 
+function countryCodeToFlagEmoji(countryCode) {
+	if (!countryCode) return "🏳️";
+	return countryCode
+		.toUpperCase()
+		.replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt()));
+}
+
 function App() {
 	// State from both versions
 	const [selectedVesselImo, setSelectedVesselImo] = useState(null);
@@ -528,7 +535,10 @@ function App() {
 	const [isPlaying, setIsPlaying] = useState(false);
 	const [followLatest, setFollowLatest] = useState(true);
 	const [showHeatmap, setShowHeatmap] = useState(false);
+	const [vesselSummaries, setVesselSummaries] = useState({});
+	const [vesselFlags, setVesselFlags] = useState({});
 	const hasStartedSimulationRef = useRef(false);
+	const [behaviorAnalysis, setBehaviorAnalysis] = useState({});
 
 	// TanStack Query for Backend Integration
 	const { data: simData } = useQuery({
@@ -536,23 +546,41 @@ function App() {
 		queryFn: async () => {
 			try {
 				if (!hasStartedSimulationRef.current) {
-					await fetch("http://localhost:8000/api/v1/simulation/start", {
-						method: "POST",
-					});
+					const startRes = await fetch(
+						"http://localhost:8000/api/v1/simulation/start",
+						{
+							method: "POST",
+						},
+					);
+					const startData = await startRes.json();
+					console.log("hi ", startData.vessel_prompt_results);
+					setBehaviorAnalysis(startData.behavior_analysis || {});
+					setVesselSummaries(startData.vessel_prompt_results || {});
+					setVesselFlags(startData.vessel_flags || {});
 					hasStartedSimulationRef.current = true;
 				}
 				const res = await fetch("http://localhost:8000/api/v1/simulation");
+				const resData = await res.json();
+				setBehaviorAnalysis(resData.behavior_analysis || {});
 				if (res.status === 400) {
 					// Simulation probably not started, start it
-					await fetch("http://localhost:8000/api/v1/simulation/start", {
-						method: "POST",
-					});
+					const startRes = await fetch(
+						"http://localhost:8000/api/v1/simulation/start",
+						{
+							method: "POST",
+						},
+					);
+					const startData = await startRes.json();
+					console.log("hi ", startData.vessel_prompt_results);
+					setBehaviorAnalysis(startData.behavior_analysis || {});
+					setVesselSummaries(startData.vessel_prompt_results || {});
+					setVesselFlags(startData.vessel_flags || {});
 					const retryRes = await fetch(
 						"http://localhost:8000/api/v1/simulation",
 					);
 					return retryRes.json();
 				}
-				return res.json();
+				return resData;
 			} catch (err) {
 				console.error("Backend fetch error:", err);
 				return { vessels: [] };
@@ -634,7 +662,7 @@ function App() {
 				return point ? { ...vessel, point } : null;
 			}).filter(Boolean),
 
-		[currentTs, MOCK_VESSELS]
+		[currentTs, MOCK_VESSELS],
 	);
 
 	const heatmapPoints = useMemo(
@@ -707,9 +735,9 @@ function App() {
 							)}
 
 							{vesselsAtTime.map((vessel) => {
-                                if (vessel.mmsi == "2000016") {
-                                    console.log("hi");
-                                }
+								if (vessel.mmsi == "2000016") {
+									console.log("hi");
+								}
 								const trail = getTrailUntil(vessel.track, currentTs);
 								const isGood = vessel.status === "Compliant";
 								const greenColor = "oklch(52.7% 0.154 150.069)";
@@ -810,10 +838,7 @@ function App() {
 											center={[vessel.point.lat, vessel.point.lon]}
 											radius={5}
 											pathOptions={{
-												color:
-													isGood
-															? greenColor
-															: redColor,
+												color: isGood ? greenColor : redColor,
 												fillColor: isGood ? greenColor : redColor,
 												fillOpacity: 0.8,
 												weight: selectedVesselImo === vessel.imo ? 3 : 1,
@@ -930,11 +955,47 @@ function App() {
 										</div>
 										<div>
 											<span className="text-[11px] uppercase text-text-dim tracking-wide">
-												IMO Number
+												MMSI Number
 											</span>
 											<p className="font-mono text-sm mt-1">
 												{selectedVesselDetails.imo}
 											</p>
+											<div className="mt-4">
+												<h4 className="font-semibold text-sm mb-1">
+													Agent Summary
+												</h4>
+												<pre className="whitespace-pre-wrap text-xs bg-gray-900/30 p-2 rounded">
+													{vesselSummaries[selectedVesselDetails.mmsi]}
+												</pre>
+											</div>
+											{behaviorAnalysis[selectedVesselDetails?.mmsi] && (
+												<div className="mt-4">
+													<h4 className="font-semibold text-sm mb-1">
+														Behavior Analysis
+													</h4>
+													<pre className="whitespace-pre-wrap text-xs bg-gray-900/30 p-2 rounded">
+														{behaviorAnalysis[selectedVesselDetails.mmsi]}
+													</pre>
+												</div>
+											)}
+										</div>
+										<div>
+											<span className="text-[11px] uppercase text-text-dim tracking-wide">
+												Flag / Country
+											</span>
+											<div className="flex items-center gap-2 mt-1">
+												<span style={{ fontSize: "1.5em" }}>
+													{countryCodeToFlagEmoji(
+														vesselFlags[selectedVesselDetails?.mmsi]
+															?.toUpperCase()
+															.slice(0, 2),
+													)}
+												</span>
+												<span className="font-mono text-sm">
+													{vesselFlags[selectedVesselDetails?.mmsi] ||
+														"Unknown"}
+												</span>
+											</div>
 										</div>
 										<div>
 											<span className="text-[11px] uppercase text-text-dim tracking-wide">
@@ -951,17 +1012,23 @@ function App() {
 												selectedVesselDetails,
 												currentTs,
 											);
-                                            const s = getVesselSpeed(selectedVesselDetails, currentTs);
+											const s = getVesselSpeed(
+												selectedVesselDetails,
+												currentTs,
+											);
 											if (h === null) return null;
-                                            console.log(selectedVesselDetails)
+											console.log(selectedVesselDetails);
 											return (
 												<div>
 													<span className="text-[11px] uppercase text-text-dim tracking-wide">
 														Heading
 													</span>
-                                                    <p>Reported Heading: {selectedVesselDetails.latest_point.course}</p>
+													<p>
+														Reported Heading:{" "}
+														{selectedVesselDetails.latest_point.course}
+													</p>
 													<p>Actual Heading: </p>
-                                                    <div className="flex items-center gap-3 mt-1">
+													<div className="flex items-center gap-3 mt-1">
 														<span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-white/[0.06] border border-border">
 															<span
 																style={{
@@ -978,12 +1045,15 @@ function App() {
 															{h.toFixed(1)}° {headingToCompass(h)}
 														</span>
 													</div>
-                                                    <span className="text-[11px] uppercase text-text-dim tracking-wide">
+													<span className="text-[11px] uppercase text-text-dim tracking-wide">
 														Speed
 													</span>
-                                                    <p>Reported Speed: {selectedVesselDetails.latest_point.speed} knots</p>
-                                                    <p>Actual Speed</p>
-                                                    <div className="flex items-center gap-3 mt-1">
+													<p>
+														Reported Speed:{" "}
+														{selectedVesselDetails.latest_point.speed} knots
+													</p>
+													<p>Actual Speed</p>
+													<div className="flex items-center gap-3 mt-1">
 														<span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-white/[0.06] border border-border">
 															<span
 																style={{
